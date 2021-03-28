@@ -189,8 +189,8 @@ namespace loam
     auto const& surfacePointsLessFlat () { return _surfacePointsLessFlat; }
     auto const& config                () { return _config               ; }
 
-    cv::Mat _mat_left;
-    cv::Mat _mat_right;
+    // cv::Mat _mat_left;
+    // cv::Mat _mat_right;
     cv::Mat _mat_depth;
 
     // 라이다 depth이미지 띄우기

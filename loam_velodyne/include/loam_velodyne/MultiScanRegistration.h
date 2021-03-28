@@ -160,12 +160,6 @@ private:
    */
   void process(const pcl::PointCloud<pcl::PointXYZI>& laserCloudIn, const Time& scanTime);
 
-  ////////////////////////////////////////////
-  bool isOverlap(const pcl::PointXYZRGBNormal& point);
-  // void makePixelPoint(const pcl::PointXYZRGBNormal& point, int scanID);
-
-  void calcNorVec(pcl::PointXYZRGBNormal& point, int scanID);
-  ////////////////////////////////////////////
 
 private:
   int _systemDelay = 20;             ///< system startup delay counter
@@ -186,12 +180,12 @@ private:
 
   bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
 
-  std::set<std::string> overlapCheck;
-  std::set<std::string>::iterator iter;
+  // std::set<std::string> overlapCheck;
+  // std::set<std::string>::iterator iter;
 
-  //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
-  std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
-  ////////////////////////////////////////////
+  // //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
+  // std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
+  // ////////////////////////////////////////////
 };
 
 } // end namespace loam

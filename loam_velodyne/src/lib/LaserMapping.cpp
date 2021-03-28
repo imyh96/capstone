@@ -184,8 +184,8 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
    _subDepthRectified = node.subscribe("/zed2/zed_node/depth/depth_registered", 10, &LaserMapping::depthHandler, this);
    /////////////////////////////////////////////
 
-   if(!_newLeftcamInfo)
-      _subLeftcamInfo = node.subscribe("/zed2/zed_node/left/camera_info", 10, &LaserMapping::leftcamInfoHandler, this);
+   // if(!_newLeftcamInfo)
+   //    _subLeftcamInfo = node.subscribe("/zed2/zed_node/left/camera_info", 10, &LaserMapping::leftcamInfoHandler, this);
 
    return true;
 }
@@ -218,21 +218,9 @@ void LaserMapping::depthHandler(const sensor_msgs::Image::ConstPtr& msg) {
 
     _mat_depth = cv_ptr->image;
 
-
     // Get a pointer to the depth values casting the data
     // pointer to floating point
     depths = (float*)(&msg->data[0]);
-}
-void LaserMapping::leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg) {
-
-   K = (cv::Mat_<float>(3,3) <<  msg->P[0], msg->P[1], msg->P[2],
-                                 msg->P[4], msg->P[5], msg->P[6],
-                                 msg->P[8], msg->P[9], msg->P[10] );
-
-   // 두 행렬 곱하기.
-   KE = K * E;
-
-   _newLeftcamInfo = true;   // 한번만 시행되도록 flag ON.
 }
 
 void LaserMapping::zedPoseHandler(const geometry_msgs::PoseStamped::ConstPtr& msg) {

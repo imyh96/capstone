@@ -138,27 +138,14 @@ public:
    
    auto const& zedWorldTrans()   const { return _zedWorldTrans; }
 
-   // void pointAssociateToZedMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);   // 포인트를 world좌표계로 변환하고, XYZRGBNormal -> XYZRGB 로 바꿔주기 위한 함수.
-   // void pointAssociateTobeZedMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);
-
    bool newPointCloud = false;   // 클라우드의 업데이트를 확인하기 위한 flag.
 
-   void saveZedMapPoseStart(Twist const& twist);
-   void saveZedMapPoseEnd(Twist const& twist);
-   void KalmanFilter();
+   void changetoZedRT(Twist const& twist);
    ////////////////////////////////////////////////////////////////////
 
 
    ////////////////////////////////////////////////////////////////////
    bool isOverlap(const pcl::PointXYZRGB& point);
-   void makePixelPoint(const pcl::PointXYZRGBNormal& point);
-
-   //HD 내부파라미터
-   cv::Mat K;
-   cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
-                                          0, -1, 0, 0.066, //-0.056, -0.026, 0.066
-                                          0,  0, 1, 0.0444); //0.0444
-   cv::Mat KE;
 
    float* depths;
    cv::Mat _mat_left;
@@ -222,37 +209,11 @@ private:
    pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColorStack;
    
    int SInd = 0;
-
    pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurroundColor;
-
    Twist _zedWorldTrans;         // subscribe로 계속해서 업데이트 되는 변수.
 
-   // Kalman Filter parameters
-   Twist _zedTransStart;
-   Twist _zedTransEnd;
-   // Twist _zedWorldTransMapped;   // 칼만 필터를 거친 실제로 사용되는 Trans.
-
-   cv::Mat H = Mat::eye(6, 6, CV_32F);
-   
-   cv::Mat A, x, P, xp, Pp, z, tmp;
-   cv::Mat K_;
-   cv:: Mat iden = Mat::eye(6, 6, CV_32F);
-
-   cv::Mat Q = Mat::eye(6, 6, CV_32F) * 0.0001;
-   cv::Mat R = Mat::eye(6, 6, CV_32F) * 10;
-
-   //double delT;
-   bool firstRun = true;
-   // /////////////////////////////////////////////////
-
-
-   //////////////////////////////////////////////////////
    std::set<std::string> overlapCheck;
    std::set<std::string>::iterator iter;
-   //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
-   // std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
-
-   //  pcl::PointCloud<pcl::PointXYZRGB> _pixelCloud;
    //////////////////////////////////////////////////////
 
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerStack;

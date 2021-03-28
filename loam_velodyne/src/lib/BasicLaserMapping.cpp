@@ -29,10 +29,6 @@
 // This is an implementation of the algorithm described in the following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-#define Kalman_Filter 0
-#define lidarRT 0
-#define camRT 1
-
 
 #include "loam_velodyne/BasicLaserMapping.h"
 #include "loam_velodyne/nanoflann_pcl.h"
@@ -41,7 +37,12 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+
+#define lidarRT 0
+#define camRT 1
+
 int cnt = 0;
+
 
 namespace loam
 {
@@ -341,20 +342,6 @@ bool BasicLaserMapping::createDownsizedMap()
 
    // accumulate map cloud.      // map cloud를 축적한다.
    _laserCloudSurround->clear();
-
-   // for (int i = 0; i < PCNUM; i++)
-   // {
-   //    *_laserCloudSurround += *_laserCloudFullResArray[i];
-   // }
-   
-   // std::cout << "size of _laserCloudFullResColorStack: " << _laserCloudFullResColorStack.size() << std::endl;
-   // *_laserCloudSurround += _laserCloudFullResColorStack;  // 업데이트된 full res color pc를 laserCloudSurround로 입력.
-   //*_laserCloudSurroundColor += _laserCloudFullResColor;
-
-   //ply 포맷으로 포인트 클라우드 저장.
-   // pcl::io::savePLYFileBinary("/home/cgvlab/ply_test/output_zedTrans79_speed.ply", *_laserCloudSurround);
-
-   _laserCloudSurround->clear();
    *_laserCloudSurround += _laserCloudFullResColor;
 
    newPointCloud = true;
@@ -419,14 +406,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    _laserOdometryTime = laserOdometryTime;   // time stamp.
 
    pcl::PointXYZRGBNormal pointSel;
+
    ///////////////////////////
    pcl::PointXYZRGB pointRGB;    // PointXYZRGBNormal -> PointXYZRGB 타입으로 바꿔주기 위한 포인트 변수.
-
-#if Kalman_Filter 
-   if(firstRun)
-      saveZedMapPoseStart(_zedWorldTrans);   // A를 생성하기위한 첫번째 trans 저장.
-#endif
-
    ///////////////////////////
 
 
@@ -438,7 +420,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
 #if camRT
    /////////////////////////////////////////////////////
-   saveZedMapPoseEnd(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
+   changetoZedRT(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
    /////////////////////////////////////////////////////
 #endif
    
@@ -710,38 +692,19 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    /////////////////////////////////////////////////////////////////////////////////////////////////////////
 #endif
 
-   
-#if Kalman_Filter 
-   ////////////////////////////////칼만 필터 적용////////////////////////////////
-
-   // 카메라Trans를 라이다Trans를 이용해 최적화.
-   // 최적화한 Trans는 다음 융합을 위한 A행렬에 사용된다.
-   KalmanFilter();
-
-   ///////////////////////////////////////////////////////////////////////////
-#endif
 
    ////////////////////////////////////////
-
   int xp, yp, Idx, B, G, R;
   
   uchar* p;
   int channels = _mat_left.channels();
 
   float depthZ, depthL, xl, yl, zl;
-  cv::Mat_<float> xyz_C(3,1);
-  cv::Mat_<float> xyz_L(4,1);
   
-  int zedepth, lidepth;
-  float zedepthf, lidepthf;
+//   int zedepth, lidepth;
+//   float zedepthf, lidepthf;
   std::uint32_t rgb;
 
-
-  // cam to lidar용.
-  cv::Mat_<float> xy_C(3,1);
-  ////////////////////////////////////////
-
-  ////////////////////////////////////////
   double fx_d = K.at<float>(0,0);
   double fy_d = K.at<float>(1,1);
   double cx_d = K.at<float>(0,2);
@@ -764,83 +727,57 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
       // 해당 점에 색이 입혀진 경우.
       if(pt.normal_z != -1 && pt.normal_y != -1 && pt.normal_x != -1){
 
-         // xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
-         // xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
+         xl = pt.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
+         yl = pt.y + 0.066;
+         zl = pt.z - 0.0444;
 
-         // xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
-         // yp = round(xyz_C[1][0]/xyz_C[2][0]);
+         depthL = sqrt(xl*xl + yl*yl + zl*zl);
+         depthZ = pt.normal_z;
+         xp = pt.normal_x;
+         yp = pt.normal_y;
 
-         // if(pixRange <= xp && xp < 1280-pixRange)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
-         // //if(321 <= xp && xp < 960)
-         // {
-         //    if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
-         //    {
-               xl = pt.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
-               yl = pt.y + 0.066;
-               zl = pt.z - 0.0444;
+         if(((depthL-range) < depthZ) && (depthZ < (depthL+range)))
+         {
+            for(int x = xp-pixRange; x < xp+pixRange; x++){
+               for(int y = yp-pixRange; y < yp+pixRange; y++){
 
-               depthL = sqrt(xl*xl + yl*yl + zl*zl);
-               depthZ = pt.normal_z;
-               xp = pt.normal_x;
-               yp = pt.normal_y;
+                  ind = x + 1280 * y;
 
-               // Idx = xp + 1280*yp;
-
-               // if(std::isfinite(depths[Idx])){
-               //    zedepthf = depths[Idx];
-               //    lidepthf = depthL;
-
-                  if(((depthL-range) < depthZ) && (depthZ < (depthL+range)))
+                  if(((depthL-range) < depths[ind]) && (depths[ind] < (depthL+range)))
                   {
-                  // //if(((lidepthf-0.2) < zedepthf) && (zedepthf < (lidepthf+0.2))){
-                  //    // //original
-                     for(int x = xp-pixRange; x < xp+pixRange; x++){
-                       for(int y = yp-pixRange; y < yp+pixRange; y++){
+                     pixpoint.x = -((x - cx_d) * depthL / fx_d);
+                     pixpoint.y = -((y - cy_d) * depthL / fy_d);
+                     pixpoint.z = depthL;
 
-                           ind = x + 1280 * y;
+                     if(!isOverlap(pixpoint))
+                     {
+                        p = _mat_left.ptr<uchar>(y);
+                        B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
+                        G = p[x*channels + 1];
+                        R = p[x*channels + 2]; 
 
-                           if(((depthL-range) < depths[ind]) && (depths[ind] < (depthL+range)))
-                           {
-                              pixpoint.x = -((x - cx_d) * depthL / fx_d);
-                              pixpoint.y = -((y - cy_d) * depthL / fy_d);
-                              pixpoint.z = depthL;
+                        rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+                        pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
 
-                              p = _mat_left.ptr<uchar>(y);
-                              B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
-                              G = p[x*channels + 1];
-                              R = p[x*channels + 2]; 
+                        pointAssociateToMap(pixpoint, pointRGB);
+                        
+                        _laserCloudFullResColor.push_back(pointRGB);
+                        
+                        if(SInd > PCNUM-1)
+                           SInd = 0;
+                        _laserCloudFullResArray[SInd]->push_back(pointRGB);
 
-                              rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
-                              pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
-
-                              pointAssociateToMap(pixpoint, pointRGB);
-
-                              if(!isOverlap(pointRGB)){
-                                 _laserCloudFullResColor.push_back(pointRGB);
-                                 
-                                 if(SInd > PCNUM-1)
-                                    SInd = 0;
-                                 _laserCloudFullResArray[SInd]->push_back(pointRGB);
-                                 
-                              }
-                           }
-                           
-                        }
-                     }
-
-                     SInd++;
-                     // pointAssociateToMap(pt, pointRGB);
-
-                     // if(!isOverlap(pointRGB)){
-                     //    _laserCloudFullResColor.push_back(pointRGB);
-                     //    _laserCloudFullResColorStack.push_back(pointRGB);
+                     }   
                      
                   }
-               // }
-         //    }
-         // }  
+                  
+               }
+            }
+         }
       }  
    }
+
+   SInd++;
    ///////////////////////////////////////////////////////
    
 
@@ -955,84 +892,10 @@ void BasicLaserMapping::updateZedPose(double pitch, double yaw, double roll, dou
    _zedWorldTrans.pos.z() = float(x);
 }
 
-void BasicLaserMapping::saveZedMapPoseStart(Twist const& twist){
-   _zedTransStart = twist;
-}
-void BasicLaserMapping::saveZedMapPoseEnd(Twist const& twist){
-#if Kalman_Filter 
-   if(!firstRun)
-      _zedTransStart = _zedTransEnd;
-   _zedTransEnd = twist;
-#endif
+void BasicLaserMapping::changetoZedRT(Twist const& twist){
    _transformTobeMapped = twist;
 }
 
-void BasicLaserMapping::KalmanFilter()
-{
-   // A 생성하기
-   // tmp = (cv::Mat_<float>(6,1) <<_zedTransEnd.pos.x() - _zedTransStart.pos.x(),
-   //                               _zedTransEnd.pos.y() - _zedTransStart.pos.y(),
-   //                               _zedTransEnd.pos.z() - _zedTransStart.pos.z(),
-   //                               _zedTransEnd.rot_x.rad() - _zedTransStart.rot_x.rad(),
-   //                               _zedTransEnd.rot_y.rad() - _zedTransStart.rot_y.rad(),
-   //                               _zedTransEnd.rot_z.rad() - _zedTransStart.rot_z.rad() );
-
-
-   // A = (cv::Mat_<float>(6,6) <<  (2 - _zedTransStart.pos.x()/_zedTransEnd.pos.x()), 0, 0, 0, 0, 0,
-   //                               0, (2 - _zedTransStart.pos.y()/_zedTransEnd.pos.y()), 0, 0, 0, 0,
-   //                               0, 0, (2 - _zedTransStart.pos.z()/_zedTransEnd.pos.z()), 0, 0, 0,
-   //                               0, 0, 0, (2 - _zedTransStart.rot_x.rad()/_zedTransEnd.rot_x.rad()), 0, 0,
-   //                               0, 0, 0, 0, (2 - _zedTransStart.rot_y.rad()/_zedTransEnd.rot_y.rad()), 0,
-   //                               0, 0, 0, 0, 0, (2 - _zedTransStart.rot_z.rad()/_zedTransEnd.rot_z.rad())   );
-
-   A = (cv::Mat_<float>(6,6) <<  _zedTransEnd.pos.x()/_zedTransStart.pos.x(), 0, 0, 0, 0, 0,
-                                 0, _zedTransEnd.pos.y()/_zedTransStart.pos.y(), 0, 0, 0, 0,
-                                 0, 0, _zedTransEnd.pos.z()/_zedTransStart.pos.z(), 0, 0, 0,
-                                 0, 0, 0, _zedTransEnd.rot_x.rad()/_zedTransStart.rot_x.rad(), 0, 0,
-                                 0, 0, 0, 0, _zedTransEnd.rot_y.rad()/_zedTransStart.rot_y.rad(), 0,
-                                 0, 0, 0, 0, 0, _zedTransEnd.rot_z.rad()/_zedTransStart.rot_z.rad()   );
-   
-   // A = iden + tmp;  // change to discrete system.
-
-   // 이번 sweep의 z(측정값) 저장.
-   //z = (cv::Mat_<float>(6,1) << _transformTobeMapped.pos.x(), _transformTobeMapped.pos.y(), _transformTobeMapped.pos.z(), _transformTobeMapped.rot_x.rad(), _transformTobeMapped.rot_y.rad(), _transformTobeMapped.rot_z.rad());
-   z = (cv::Mat_<float>(6,1) << _transformSum.pos.x(), _transformSum.pos.y(), _transformSum.pos.z(), _transformSum.rot_x.rad(), _transformSum.rot_y.rad(), _transformSum.rot_z.rad());
-
-   if(firstRun){
-      // x와 P의 초기값 입력. = 0.초깃값 선정
-      x = (cv::Mat_<float>(6,1) << _zedTransEnd.pos.x(), _zedTransEnd.pos.y(), _zedTransEnd.pos.z(), _zedTransEnd.rot_x.rad(), _zedTransEnd.rot_y.rad(), _zedTransEnd.rot_z.rad());
-      P = Mat::eye(6, 6, CV_32F);
-
-      std::cout << "initialized Kalman filter!" << std::endl;
-      firstRun = false;
-   }
-
-   // 1. 추정값과 오차 공분산 예측
-   xp = A * x;
-   Pp = A * P * A.t() + Q;
-
-   // 2. 칼만 이득 계산
-   tmp = H*Pp*H.t() + R;
-   K_ = Pp * H.t() * tmp.inv();
-
-   // 3. 추정값 계산
-   x = xp + K_ * (z - H*xp);
-
-   // 4. 오차 공분산 계산
-   P = Pp - K_*H*Pp;
-
-
-   // 도출된 R|t 를 입력.
-   Vector3 posi(x.at<float>(0), x.at<float>(1), x.at<float>(2));
-   _transformTobeMapped.pos.x() = posi.x();
-   _transformTobeMapped.pos.y() = posi.y();
-   _transformTobeMapped.pos.z() = posi.z();
-
-   _transformTobeMapped.rot_x = Angle(x.at<float>(3));
-   _transformTobeMapped.rot_y = Angle(x.at<float>(4));
-   _transformTobeMapped.rot_z = Angle(x.at<float>(5));
-}
-/////////////////////////////////////////////////////////
 
 void BasicLaserMapping::updateOdometry(Twist const& twist)
 {
@@ -1349,48 +1212,3 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
 
 
 } // end namespace loam
-
-
-////////////////////////////////////////////////////////
-// void BasicLaserMapping::pointAssociateToZedMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
-// {
-//    po.x = pi.x;
-//    po.y = pi.y;
-//    po.z = pi.z;
-
-//    ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
-//    // po.normal_x = pi.normal_x;
-//    // po.normal_y = pi.normal_y;
-//    // po.normal_z = pi.normal_z;
-   
-//    po.rgb = pi.rgb;
-//    ////////////////
-
-//    // po.curvature = pi.curvature;
-
-//    rotateZXY(po, _zedWorldTransMapped.rot_z, _zedWorldTransMapped.rot_x, _zedWorldTransMapped.rot_y);
-
-//    po.x += _zedWorldTransMapped.pos.x();  //_zedWorldTrans
-//    po.y += _zedWorldTransMapped.pos.y();
-//    po.z += _zedWorldTransMapped.pos.z();
-// }
-
-// void BasicLaserMapping::pointAssociateTobeZedMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
-// {
-//    po.x = pi.x - _zedWorldTransMapped.pos.x();
-//    po.y = pi.y - _zedWorldTransMapped.pos.y();
-//    po.z = pi.z - _zedWorldTransMapped.pos.z();
-
-//    // ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
-//    // po.normal_x = pi.normal_x;
-//    // po.normal_y = pi.normal_y;
-//    // po.normal_z = pi.normal_z;
-
-//    po.rgb = pi.rgb;
-//    ////////////////
-   
-//    // po.curvature = pi.curvature;
-
-//    rotateYXZ(po, -_zedWorldTransMapped.rot_y, -_zedWorldTransMapped.rot_x, -_zedWorldTransMapped.rot_z);
-// }
-////////////////////////////////////////////////////////

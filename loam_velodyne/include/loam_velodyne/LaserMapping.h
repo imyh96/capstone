@@ -44,10 +44,8 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 
-
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
 ////////////////////////////////////////
+#include <sensor_msgs/Image.h>
 #include <geometry_msgs/PoseStamped.h>
 ////////////////////////////////////////
 
@@ -102,11 +100,8 @@ public:
 
    // ////////////////////////////////////////////////////////////////
    void zedPoseHandler(const geometry_msgs::PoseStamped::ConstPtr& msg);
-   // void zedCovarianceHandler(const geometry_msgs::PoseWithCovariance::ConstPtr& msg);ffssdf
-
    void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
    void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
-   void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
    // ////////////////////////////////////////////////////////////////
 
 
@@ -157,13 +152,8 @@ private:
 
    //////////////////////////////////////////
    ros::Subscriber _subZedTrans;
-   
-   ros::Subscriber _subLeftcamInfo;
    ros::Subscriber _subLeftRectified;
    ros::Subscriber _subDepthRectified;
-
-
-   bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
    //////////////////////////////////////////
 };
 
