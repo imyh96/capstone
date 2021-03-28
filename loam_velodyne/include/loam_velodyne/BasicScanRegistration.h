@@ -10,6 +10,12 @@
 #include "CircularBuffer.h"
 #include "time_utils.h"
 
+#include <iostream>
+#include <cv_bridge/cv_bridge.h>
+#include <cv.hpp>
+#include <cmath>
+
+
 namespace loam
 {
 
@@ -36,14 +42,14 @@ namespace loam
   class RegistrationParams
   {
   public:
-    RegistrationParams(const float& scanPeriod_ = 0.1,
+    RegistrationParams(const float& scanPeriod_ = 0.1, //0.1
       const int& imuHistorySize_ = 200,
       const int& nFeatureRegions_ = 6,
       const int& curvatureRegion_ = 5,
       const int& maxCornerSharp_ = 2,
       const int& maxSurfaceFlat_ = 4,
       const float& lessFlatFilterSize_ = 0.2,
-      const float& surfaceCurvatureThreshold_ = 0.1); // 생성자.
+      const float& surfaceCurvatureThreshold_ = 0.1);
 
     /** The time per scan. */ // 한 스캔당 시간.
     float scanPeriod;
@@ -150,7 +156,7 @@ namespace loam
     *
     * @param scanTime the time relative to the scan time   // 현재 스캔이 수행되는 시간.
     */
-    void processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZI>> const& laserCloudScans);
+    void processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>> const& laserCloudScans);
 
 
     bool configure(const RegistrationParams& config = RegistrationParams()); 
@@ -167,20 +173,49 @@ namespace loam
     * @param point The point to modify.
     * @param relTime The time to project by.   // 포인트를 투영할 시점.
     */
-    void projectPointToStartOfSweep(pcl::PointXYZI& point, float relTime);
+    void projectPointToStartOfSweep(pcl::PointXYZRGBNormal& point, float relTime);
 
 
     // 각각의 값들을 return 해주는 메소드.
     auto const& imuTransform          () { return _imuTrans             ; }
     auto const& sweepStart            () { return _sweepStart           ; }
-    auto const& laserCloud            () { return _laserCloud           ; }
+
+    // auto & pixelCloud            () { return _pixelCloud          ; }
+
+    auto & laserCloud            () { return _laserCloud           ; }
     auto const& cornerPointsSharp     () { return _cornerPointsSharp    ; }
     auto const& cornerPointsLessSharp () { return _cornerPointsLessSharp; }
     auto const& surfacePointsFlat     () { return _surfacePointsFlat    ; }
     auto const& surfacePointsLessFlat () { return _surfacePointsLessFlat; }
     auto const& config                () { return _config               ; }
 
+    cv::Mat _mat_left;
+    cv::Mat _mat_right;
+    cv::Mat _mat_depth;
 
+    // 라이다 depth이미지 띄우기
+    //cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_8UC3);
+    // cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_32FC1);
+
+    //HD 내부파라미터
+    cv::Mat K;
+    //  = (cv::Mat_<float>(3,3) <<  528.82, 0, 639.07,
+    //                                       0, 528.49, 353.9245,
+    //                                       0, 0, 1);
+
+    // cv::Mat K = (cv::Mat_<float>(3,3) <<  0.52882, 0, 639.07, 
+    //                                       0, 0.52849, 353.9245,
+    //                                       0, 0, 1);
+    
+    cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
+                                           0, -1, 0, 0.066, //-0.056, -0.026, 0.066
+                                           0,  0, 1, 0.0444); //0.0444
+    cv::Mat KE;
+    cv::Mat pseu_inv_KE;
+
+    float* depths;
+
+    bool picture = false;
 
   private:
     /** \brief Check if IMU data is available. */ // IMU 데이터가 존재하는지 확인하는 bool 메소드.
@@ -199,7 +234,7 @@ namespace loam
      *
      * @param point the point to project. // 투영할 포인트
      */
-    void transformToStartIMU(pcl::PointXYZI& point);
+    void transformToStartIMU(pcl::PointXYZRGBNormal& point);
 
 
     /** \brief Prepare for next scan / sweep. // 다음 scan/sweep을 위한 준비(리셋)를 해 주는 메소드.
@@ -258,16 +293,17 @@ namespace loam
   private:
     RegistrationParams _config;  ///< registration parameter // 등록을 위한 클래스의 객체 생성.
 
-    pcl::PointCloud<pcl::PointXYZI> _laserCloud;   ///< full resolution input cloud                                                     // 입력된 full resolution 포인트 클라우드.
+    pcl::PointCloud<pcl::PointXYZRGBNormal> _laserCloud;   ///< full resolution input cloud
+    // pcl::PointCloud<pcl::PointXYZRGB> _pixelCloud;
+
     std::vector<IndexRange> _scanIndices;          ///< start and end indices of the individual scans withing the full resolution cloud // 전체 해상도 포인트 클라우드의 각 스캔 범위의 처음과 끝을 나타내는 인덱스들의 벡터.
 
 
     // 추출된 각 타입의 특징점들로 이루어진 포인트 클라우드 4종류.
-    pcl::PointCloud<pcl::PointXYZI> _cornerPointsSharp;      ///< sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI> _cornerPointsLessSharp;  ///< less sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI> _surfacePointsFlat;      ///< flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI> _surfacePointsLessFlat;  ///< less flat surface points cloud
-
+    pcl::PointCloud<pcl::PointXYZRGBNormal> _cornerPointsSharp;      ///< sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal> _cornerPointsLessSharp;  ///< less sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal> _surfacePointsFlat;      ///< flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal> _surfacePointsLessFlat;  ///< less flat surface points cloud
 
     Time _sweepStart;            ///< time stamp of beginning of current sweep                                                                      // 현재(current) sweep이 시작했을 때의 시간.
     Time _scanTime;              ///< time stamp of most recent scan                                                                                // 가장 최근에 scan이 시행된 시간.
@@ -285,6 +321,9 @@ namespace loam
     std::vector<PointLabel> _regionLabel;     ///< point label buffer                               // 각 포인트의 label에 대한 버퍼.
     std::vector<size_t> _regionSortIndices;   ///< sorted region indices based on point curvature   // 포인트의 곡률에 기반해 정렬된 영역의 인덱스
     std::vector<int> _scanNeighborPicked;     ///< flag if neighboring point was already picked     // 포인트와 이웃한 포인트가 이미 pick되었는지를 나타내는 flag.
+
+    //////////////////////////////////////////
+    
   };
 
 }

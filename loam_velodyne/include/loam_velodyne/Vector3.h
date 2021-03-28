@@ -1,6 +1,9 @@
 #ifndef LOAM_VECTOR3_H
 #define LOAM_VECTOR3_H
 
+#define PCL_NO_PRECOMPILE
+#define PCL_TRACKING_NORMAL_SUPPORTED
+#include <pcl/tracking/particle_filter.h>
 
 #include <pcl/point_types.h>
 
@@ -24,6 +27,9 @@ public:
 
   Vector3(const pcl::PointXYZI &p)
       : Eigen::Vector4f(p.x, p.y, p.z, 0) {}
+    
+  Vector3(const pcl::PointXYZRGBNormal &p)
+      : Eigen::Vector4f(p.x, p.y, p.z, 0) {}
 
   template<typename OtherDerived>
   Vector3 &operator=(const Eigen::MatrixBase <OtherDerived> &rhs) {
@@ -39,6 +45,13 @@ public:
   }
 
   Vector3 &operator=(const pcl::PointXYZI &rhs) {
+    x() = rhs.x;
+    y() = rhs.y;
+    z() = rhs.z;
+    return *this;
+  }
+
+  Vector3 &operator=(const pcl::PointXYZRGBNormal &rhs) {
     x() = rhs.x;
     y() = rhs.y;
     z() = rhs.z;
@@ -64,6 +77,15 @@ public:
     dst.y = y();
     dst.z = z();
     dst.intensity = 0;
+    return dst;
+  }
+
+  operator pcl::PointXYZRGBNormal() {
+    pcl::PointXYZRGBNormal dst;
+    dst.x = x();
+    dst.y = y();
+    dst.z = z();
+    dst.curvature = 0;
     return dst;
   }
 };

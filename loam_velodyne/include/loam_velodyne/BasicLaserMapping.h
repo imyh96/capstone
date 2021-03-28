@@ -40,6 +40,21 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
 
+#include <ros/ros.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <cv.hpp>
+
+#include <cmath>
+#include <queue>
+#include <set>
+#include <string>
+#include <cv_bridge/cv_bridge.h>
+
+#define PCNUM 120000 // number of _laserCloudFullResColorStack point clouds
+
+using namespace cv;
+
 namespace loam
 {
 
@@ -113,6 +128,47 @@ public:
 
    bool hasFreshMap() const { return _downsizedMapCreated; }
 
+
+   ////////////////////////////////////////////////////////////////////
+   void updateZedPose(double pitch, double yaw, double roll, double x, double y, double z);
+   
+   auto const& laserCloudSurround() const { return _laserCloudSurround; }
+   // auto const& laserCloudSurround() const { return *_laserCloudSurround; }
+   auto const& laserCloudSurroundColor() const { return _laserCloudSurroundColor; }
+   
+   auto const& zedWorldTrans()   const { return _zedWorldTrans; }
+
+   // void pointAssociateToZedMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);   // 포인트를 world좌표계로 변환하고, XYZRGBNormal -> XYZRGB 로 바꿔주기 위한 함수.
+   // void pointAssociateTobeZedMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);
+
+   bool newPointCloud = false;   // 클라우드의 업데이트를 확인하기 위한 flag.
+
+   void saveZedMapPoseStart(Twist const& twist);
+   void saveZedMapPoseEnd(Twist const& twist);
+   void KalmanFilter();
+   ////////////////////////////////////////////////////////////////////
+
+
+   ////////////////////////////////////////////////////////////////////
+   bool isOverlap(const pcl::PointXYZRGB& point);
+   void makePixelPoint(const pcl::PointXYZRGBNormal& point);
+
+   //HD 내부파라미터
+   cv::Mat K;
+   cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
+                                          0, -1, 0, 0.066, //-0.056, -0.026, 0.066
+                                          0,  0, 1, 0.0444); //0.0444
+   cv::Mat KE;
+
+   float* depths;
+   cv::Mat _mat_left;
+   cv::Mat _mat_depth;
+
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
+   std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudFullResArray;
+   ////////////////////////////////////////////////////////////////////
+   
+
 private:
    /** 매핑을 위해 변환행렬(_transformTobeMapped)을 최적화 하는 메소드 / Run an optimization. */
    void optimizeTransformTobeMapped();
@@ -122,8 +178,12 @@ private:
    // optimizeTransformTobeMapped() 마지막에 다음 sweep을 위해 변환행렬 변수 2개를 update하는 메소드. 이때 만일 imu state가 존재(사용가능)하면, update하기 전 imu state를 이용해 더욱 최적화 한다.
    void transformUpdate();    
 
-   void pointAssociateToMap(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
-   void pointAssociateTobeMapped(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+   void pointAssociateToMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po);
+   void pointAssociateToMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);
+   void pointAssociateToMap(const pcl::PointXYZRGB& pi, pcl::PointXYZRGB& po);
+   void pointAssociateTobeMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po);
+   void pointAssociateTobeMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po);
+
    void transformFullResToMap();
 
    bool createDownsizedMap();
@@ -153,31 +213,70 @@ private:
    const size_t _laserCloudDepth;
    const size_t _laserCloudNum;
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerLast;   ///< last corner points cloud
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfLast;     ///< last surface points cloud
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudFullRes;      ///< last full resolution cloud
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerLast;   ///< last corner points cloud
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfLast;     ///< last surface points cloud
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudFullRes;      ///< last full resolution cloud
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStack;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStack;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStackDS;  ///< down sampled
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStackDS;    ///< down sampled
+   /////////////////////////////////////////////////
+   pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColor;
+   pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColorStack;
+   
+   int SInd = 0;
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurround;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurroundDS;     ///< down sampled
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerFromMap;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfFromMap;
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurroundColor;
 
-   pcl::PointCloud<pcl::PointXYZI> _laserCloudOri;
-   pcl::PointCloud<pcl::PointXYZI> _coeffSel;
+   Twist _zedWorldTrans;         // subscribe로 계속해서 업데이트 되는 변수.
 
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerArray;
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfArray;
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerDSArray;  ///< down sampled
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfDSArray;    ///< down sampled
+   // Kalman Filter parameters
+   Twist _zedTransStart;
+   Twist _zedTransEnd;
+   // Twist _zedWorldTransMapped;   // 칼만 필터를 거친 실제로 사용되는 Trans.
+
+   cv::Mat H = Mat::eye(6, 6, CV_32F);
+   
+   cv::Mat A, x, P, xp, Pp, z, tmp;
+   cv::Mat K_;
+   cv:: Mat iden = Mat::eye(6, 6, CV_32F);
+
+   cv::Mat Q = Mat::eye(6, 6, CV_32F) * 0.0001;
+   cv::Mat R = Mat::eye(6, 6, CV_32F) * 10;
+
+   //double delT;
+   bool firstRun = true;
+   // /////////////////////////////////////////////////
+
+
+   //////////////////////////////////////////////////////
+   std::set<std::string> overlapCheck;
+   std::set<std::string>::iterator iter;
+   //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
+   // std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
+
+   //  pcl::PointCloud<pcl::PointXYZRGB> _pixelCloud;
+   //////////////////////////////////////////////////////
+
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerStack;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfStack;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerStackDS;  ///< down sampled
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfStackDS;    ///< down sampled
+
+   // pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurroundDS;     ///< down sampled
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerFromMap;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfFromMap;
+
+   
+
+   pcl::PointCloud<pcl::PointXYZRGBNormal> _laserCloudOri;
+   pcl::PointCloud<pcl::PointXYZRGBNormal> _coeffSel;
+
+   std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> _laserCloudCornerArray;
+   std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> _laserCloudSurfArray;
+   std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> _laserCloudCornerDSArray;  ///< down sampled
+   std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> _laserCloudSurfDSArray;    ///< down sampled
 
    std::vector<size_t> _laserCloudValidInd;
    std::vector<size_t> _laserCloudSurroundInd;
-
 
    // 변환 행렬들을 위한 변수들.
    Twist _transformSum, _transformIncre, _transformTobeMapped, _transformBefMapped, _transformAftMapped;
@@ -187,12 +286,11 @@ private:
    // _transformTobeMapped = 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬. 즉 (T^L)_k+1 과 (T^W)_k로 생성되는 (T^W)_k+1.
    // _transformAftMapped  = 이전 sweep의 _transformTobeMapped. 즉 (T^W)_k
 
-
    CircularBuffer<IMUState2> _imuHistory;    ///< IMU상태에 대한 과거 기록들 / history of IMU states
 
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterCorner;   ///< 코너 클라우드를 다운사이징하기 위한 복셀 필터 / voxel filter for down sizing corner clouds
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterSurf;     ///< 표면 클라우드를 다운사이징하기 위한 복셀 필터 / voxel filter for down sizing surface clouds
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterMap;      ///< 누적 맵 크기를 줄이기 위한 복셀 필터 / voxel filter for down sizing accumulated map
+   pcl::VoxelGrid<pcl::PointXYZRGBNormal> _downSizeFilterCorner;   ///< 코너 클라우드를 다운사이징하기 위한 복셀 필터 / voxel filter for down sizing corner clouds
+   pcl::VoxelGrid<pcl::PointXYZRGBNormal> _downSizeFilterSurf;     ///< 표면 클라우드를 다운사이징하기 위한 복셀 필터 / voxel filter for down sizing surface clouds
+   pcl::VoxelGrid<pcl::PointXYZRGBNormal> _downSizeFilterMap;      ///< 누적 맵 크기를 줄이기 위한 복셀 필터 / voxel filter for down sizing accumulated map
 
    bool _downsizedMapCreated = false;
 };

@@ -39,6 +39,8 @@
 #include <pcl/point_types.h>
 #include "time_utils.h"
 
+#include <iostream>
+
 namespace loam {
 
 /** \brief Construct a new point cloud message from the specified information and publish it via the given publisher.

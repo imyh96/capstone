@@ -90,13 +90,21 @@ namespace loam
 
 
   private:
+    
+
     ros::Subscriber _subImu;                    ///< IMU message subscriber.                    // IMU센서로부터의 값을 받아오는 subscriber
+
+    // ros::Publisher _pubPixelCloud;    // 새로 추가.
+    
     ros::Publisher _pubLaserCloud;              ///< full resolution cloud message publisher.   // 아래 6개는 다른 node로 값을 주기 위한 총 6가지 메세지의 publisher.
     ros::Publisher _pubCornerPointsSharp;       ///< sharp corner cloud message publisher
     ros::Publisher _pubCornerPointsLessSharp;   ///< less sharp corner cloud message publisher
     ros::Publisher _pubSurfPointsFlat;          ///< flat surface cloud message publisher
     ros::Publisher _pubSurfPointsLessFlat;      ///< less flat surface cloud message publisher
     ros::Publisher _pubImuTrans;                ///< IMU transformation message publisher
+
+    ros::Publisher _pubRightRectified;
+    ros::Publisher _pubLeftRectified;
   };
 
 } // end namespace loam

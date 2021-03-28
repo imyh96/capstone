@@ -35,7 +35,6 @@
 
 #include <tf/transform_datatypes.h>
 
-
 namespace loam {
 
 
@@ -147,8 +146,11 @@ bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateN
 
   // subscribe to IMU topic
   _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
+  //_subImu = node.subscribe<sensor_msgs::Imu>("/zed2/zed_node/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
   // advertise scan registration topics
+  // _pubPixelCloud            = node.advertise<sensor_msgs::PointCloud2>("/pixel_cloud", 2);
+  // ////////////////////////////
   _pubLaserCloud            = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 2);
   _pubCornerPointsSharp     = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 2);
   _pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 2);
@@ -156,13 +158,22 @@ bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateN
   _pubSurfPointsLessFlat    = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 2);
   _pubImuTrans              = node.advertise<sensor_msgs::PointCloud2>("/imu_trans", 5);
 
+  _pubRightRectified        = node.advertise<sensor_msgs::Image>("/zed2/zed_node/right/image_rect_color", 10);
+  _pubLeftRectified         = node.advertise<sensor_msgs::Image>("/zed2/zed_node/left/image_rect_color", 10);
+
   return true;
 }
 
 
-
 void ScanRegistration::handleIMUMessage(const sensor_msgs::Imu::ConstPtr& imuIn) // IMU 센서로 부터의 메세지를 처리하기 위한 핸들러. imuIn가 새로운 IMU 메세지.
 {
+  ///*
+  // ROS_INFO( "Accel: %.3f,%.3f,%.3f [m/s^2] - Ang. vel: %.3f,%.3f,%.3f [deg/sec] - Orient. Quat: %.3f,%.3f,%.3f,%.3f",
+  //             imuIn->linear_acceleration.x, imuIn->linear_acceleration.y, imuIn->linear_acceleration.z,
+  //             imuIn->angular_velocity.x, imuIn->angular_velocity.y, imuIn->angular_velocity.z,
+  //             imuIn->orientation.x, imuIn->orientation.y, imuIn->orientation.z, imuIn->orientation.w);
+  //*/
+
   tf::Quaternion orientation;
   tf::quaternionMsgToTF(imuIn->orientation, orientation);
   double roll, pitch, yaw;
@@ -180,6 +191,10 @@ void ScanRegistration::handleIMUMessage(const sensor_msgs::Imu::ConstPtr& imuIn)
   newState.yaw = yaw;
   newState.acceleration = acc;
 
+  //*
+  //std::cout << "newState parameters - roll, pitch, yaw, acc " << roll << " " << pitch << " " << yaw << " " << acc << " " << std::endl;
+  //*
+
   updateIMUData(acc, newState);
 }
 
@@ -188,6 +203,7 @@ void ScanRegistration::publishResult()
 {
   auto sweepStartTime = toROSTime(sweepStart());
   // publish full resolution and feature point clouds
+  
   publishCloudMsg(_pubLaserCloud, laserCloud(), sweepStartTime, "/camera");
   publishCloudMsg(_pubCornerPointsSharp, cornerPointsSharp(), sweepStartTime, "/camera");
   publishCloudMsg(_pubCornerPointsLessSharp, cornerPointsLessSharp(), sweepStartTime, "/camera");
@@ -196,6 +212,15 @@ void ScanRegistration::publishResult()
 
   // publish corresponding IMU transformation information
   publishCloudMsg(_pubImuTrans, imuTransform(), sweepStartTime, "/camera");
+
+
+  // publishCloudMsg(_pubPixelCloud, pixelCloud(), sweepStartTime, "/camera");   // 새로 추가.
+
+  //* 좌 우의 이미지를 publish해 주는 부분 *//
+  // sensor_msgs::ImagePtr msg_right = cv_bridge::CvImage(std_msgs::Header(), "bgr8", _mat_right).toImageMsg();
+  // sensor_msgs::ImagePtr msg_left = cv_bridge::CvImage(std_msgs::Header(), "bgr8", _mat_left).toImageMsg();
+  // _pubRightRectified.publish(msg_right);
+  // _pubLeftRectified.publish(msg_left);
 }
 
 } // end namespace loam

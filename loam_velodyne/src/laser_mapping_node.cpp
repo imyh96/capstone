@@ -2,6 +2,7 @@
 #include "loam_velodyne/LaserMapping.h"
 
 
+
 /** Main node entry point. */
 int main(int argc, char **argv)
 {
@@ -15,6 +16,6 @@ int main(int argc, char **argv)
     // initialization successful
     laserMapping.spin();
   }
-
+  
   return 0;
 }

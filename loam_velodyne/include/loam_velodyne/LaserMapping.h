@@ -45,6 +45,11 @@
 #include <tf/transform_broadcaster.h>
 
 
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
+////////////////////////////////////////
+#include <geometry_msgs/PoseStamped.h>
+////////////////////////////////////////
 
 namespace loam
 {
@@ -95,6 +100,16 @@ public:
    void imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn);
 
 
+   // ////////////////////////////////////////////////////////////////
+   void zedPoseHandler(const geometry_msgs::PoseStamped::ConstPtr& msg);
+   // void zedCovarianceHandler(const geometry_msgs::PoseWithCovariance::ConstPtr& msg);ffssdf
+
+   void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
+   void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
+   void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+   // ////////////////////////////////////////////////////////////////
+
+
    /** \brief 종료될 때까지 루프에서 수신 메시지 처리(활성 모드에서 사용) / Process incoming messages in a loop until shutdown (used in active mode). */
    void spin();
 
@@ -129,6 +144,7 @@ private:
    tf::StampedTransform _aftMappedTrans;   ///< 매핑 odometry 변환 / mapping odometry transformation
 
    ros::Publisher _pubLaserCloudSurround;    ///< map cloud 메시지 송신기 / map cloud message publisher
+
    ros::Publisher _pubLaserCloudFullRes;     ///< 현재 full resolution cloud 메시지 송신기 / current full resolution cloud message publisher
    ros::Publisher _pubOdomAftMapped;         ///< 매핑 odometry 송신기 / mapping odometry publisher
    tf::TransformBroadcaster _tfBroadcaster;  ///< 매핑 odometry 변환(행렬) broadcaster / mapping odometry transform broadcaster
@@ -138,6 +154,17 @@ private:
    ros::Subscriber _subLaserCloudFullRes;      ///< full resolution cloud 메시지 수신부 / full resolution cloud message subscriber
    ros::Subscriber _subLaserOdometry;          ///< laser odometry 메시지 수신부 / laser odometry message subscriber
    ros::Subscriber _subImu;                    ///< IMU 메시지 수신부 / IMU message subscriber
+
+   //////////////////////////////////////////
+   ros::Subscriber _subZedTrans;
+   
+   ros::Subscriber _subLeftcamInfo;
+   ros::Subscriber _subLeftRectified;
+   ros::Subscriber _subDepthRectified;
+
+
+   bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
+   //////////////////////////////////////////
 };
 
 } // end namespace loam

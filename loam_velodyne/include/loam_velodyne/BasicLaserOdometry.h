@@ -4,6 +4,14 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include <cmath>
+#include <queue>
+#include <set>
+#include <string>
+#include <cv_bridge/cv_bridge.h>
+#include <cv.hpp>
+
+
 namespace loam
 {
 
@@ -52,11 +60,39 @@ namespace loam
     auto deltaRAbort()   const { return _deltaRAbort;   }
 
 
+    // auto & pixelCloud            () { return _pixelCloud          ; }
+    // cv::Mat _mat_left;
+    // cv::Mat _mat_right;
+    // cv::Mat _mat_depth;
+
+    // // 라이다 depth이미지 띄우기
+    // //cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_8UC3);
+    // // cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_32FC1);
+
+    // //HD 내부파라미터
+    // cv::Mat K;
+    // //  = (cv::Mat_<float>(3,3) <<  528.82, 0, 639.07,
+    // //                                       0, 528.49, 353.9245,
+    // //                                       0, 0, 1);
+
+    // // cv::Mat K = (cv::Mat_<float>(3,3) <<  0.52882, 0, 639.07, 
+    // //                                       0, 0.52849, 353.9245,
+    // //                                       0, 0, 1);
+    
+    // cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
+    //                                        0, -1, 0, 0.066, //-0.056, -0.026, 0.066
+    //                                        0,  0, 1, 0.0444); //0.0444
+    // cv::Mat KE;
+    // cv::Mat pseu_inv_KE;
+
+    // float* depths;
+
+
     /** \brief Transform the given point cloud to the end of the sweep. // 주어진 포인트 클라우드를 sweep의 끝 지점으로 변환(transform)해 주는 메소드.
      *  
      * @param cloud the point cloud to transform.                       // 변환할 포인트 클라우드.
      */
-    size_t transformToEnd(pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud);
+    size_t transformToEnd(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& cloud);
 
 
   private:
@@ -65,7 +101,7 @@ namespace loam
      * @param pi the point to transform.                            // 변환할 포인트 클라우드.
      * @param po the point instance for storing the result.         // 메소드의 리턴값을 저장하기 위한 포인트 클라우드 객체.
      */
-    void transformToStart(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+    void transformToStart(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po);
 
 
     void pluginIMURotation(const Angle& bcx, const Angle& bcy, const Angle& bcz,
@@ -76,6 +112,9 @@ namespace loam
     void accumulateRotation(Angle cx, Angle cy, Angle cz,
                             Angle lx, Angle ly, Angle lz,
                             Angle &ox, Angle &oy, Angle &oz);
+    
+    // bool isOverlap(const pcl::PointXYZRGB& point);
+    // void makePixelPoint(const pcl::PointXYZRGB& point, int scanID);
 
   private:
     float _scanPeriod;       ///< time per scan.                // 스캔 주기
@@ -89,20 +128,20 @@ namespace loam
 
 
     // multi-scan registration 노드로 부터 새 특징점 클라우드를 넘겨받아, _Points변수가 덮어씌워지므로, motion estimation을 위해 이전 sweep의 특징점 클라우드를 저장해 두기 위한 변수들.
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastCornerCloud;    ///< last corner points cloud.    // 이전 corner 클라우드.
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastSurfaceCloud;   ///< last surface points cloud.   // 이전 surface 클라우드.
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _lastCornerCloud;    ///< last corner points cloud.    // 이전 corner 클라우드.
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _lastSurfaceCloud;   ///< last surface points cloud.   // 이전 surface 클라우드.
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudOri;      ///< point selection              // 특징점들의 neighbor로 골라진 포인트들.
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _coeffSel;           ///< point selection coefficientsw
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudOri;      ///< point selection              // 특징점들의 neighbor로 골라진 포인트들.
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _coeffSel;           ///< point selection coefficientsw
 
-    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastCornerKDTree;   ///< last corner cloud KD-tree  // 빠른 indexing을 위한 KD-tree
-    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastSurfaceKDTree;  ///< last surface cloud KD-tree
+    nanoflann::KdTreeFLANN<pcl::PointXYZRGBNormal> _lastCornerKDTree;   ///< last corner cloud KD-tree  // 빠른 indexing을 위한 KD-tree
+    nanoflann::KdTreeFLANN<pcl::PointXYZRGBNormal> _lastSurfaceKDTree;  ///< last surface cloud KD-tree
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsSharp;      ///< sharp corner points cloud        // 4개의 특징점 클라우드와 1개의 전체 해상도 포인트 클라우드를 담을 변수.
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsLessSharp;  ///< less sharp corner points cloud   // scan registration 노드로 부터 subscribe해 온것을 후처리할 때 사용.
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsFlat;         ///< flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsLessFlat;     ///< less flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloud;             ///< full resolution cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _cornerPointsSharp;      ///< sharp corner points cloud        // 4개의 특징점 클라우드와 1개의 전체 해상도 포인트 클라우드를 담을 변수.
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _cornerPointsLessSharp;  ///< less sharp corner points cloud   // scan registration 노드로 부터 subscribe해 온것을 후처리할 때 사용.
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _surfPointsFlat;         ///< flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _surfPointsLessFlat;     ///< less flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloud;             ///< full resolution cloud
 
     std::vector<int> _pointSearchCornerInd1;    ///< first corner point search index buffer
     std::vector<int> _pointSearchCornerInd2;    ///< second corner point search index buffer
@@ -120,6 +159,15 @@ namespace loam
     Angle _imuRollEnd, _imuPitchEnd, _imuYawEnd;          // 종료시의 roll pitch yaw.
     Vector3 _imuShiftFromStart;                           // 시작과 종료 사이의 위치 변화.
     Vector3 _imuVeloFromStart;                            // 시작과 종료 사이의 속도 변화.
+
+    // /////////////////////////////////////////////////////////////////
+    // std::set<std::string> overlapCheck;
+    // std::set<std::string>::iterator iter;
+    // //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
+    // std::queue<pcl::PointXYZRGB> prevPointAt[16];
+
+    // pcl::PointCloud<pcl::PointXYZRGB> _pixelCloud;
+    // /////////////////////////////////////////////////////////////////
   };
 
 } // end namespace loam

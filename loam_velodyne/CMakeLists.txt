@@ -9,19 +9,24 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   tf
-  pcl_conversions)
+  pcl_conversions
+  
+  cv_bridge)
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
+
+find_package(OpenCV REQUIRED)
 
 include_directories(
   include
 	${catkin_INCLUDE_DIRS} 
 	#${EIGEN3_INCLUDE_DIR}
-	${PCL_INCLUDE_DIRS})
+	${PCL_INCLUDE_DIRS}
+	${OpenCV_INCLUDE_DIRS})
 
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs tf pcl_conversions
+  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs tf pcl_conversions cv_bridge
   DEPENDS EIGEN3 PCL
   INCLUDE_DIRS include
   LIBRARIES loam
@@ -32,22 +37,22 @@ catkin_package(
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_definitions( -march=native )
+# add_definitions( -march=native )
 
 
 add_subdirectory(src/lib)
 
 add_executable(multiScanRegistration src/multi_scan_registration_node.cpp)
-target_link_libraries(multiScanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+target_link_libraries(multiScanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} loam )
 
 add_executable(laserOdometry src/laser_odometry_node.cpp)
-target_link_libraries(laserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+target_link_libraries(laserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} loam )
 
 add_executable(laserMapping src/laser_mapping_node.cpp)
-target_link_libraries(laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+target_link_libraries(laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} loam )
 
 add_executable(transformMaintenance src/transform_maintenance_node.cpp)
-target_link_libraries(transformMaintenance ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+target_link_libraries(transformMaintenance ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} loam )
 
 if (CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)

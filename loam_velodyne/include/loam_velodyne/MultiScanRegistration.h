@@ -37,6 +37,13 @@
 #include "loam_velodyne/ScanRegistration.h"
 
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
+
+#include <cmath>
+#include <queue>
+#include <set>
+#include <string>
 
 
 namespace loam {
@@ -118,6 +125,18 @@ public:
   bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode); // 셋업 메소드.
 
 
+  // zed2로 부터 오른쪽 왼쪽의 카메라 영상을 받아오기 위한 메소드.
+  void imageRightRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
+  void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
+
+  // zed2로 부터 깊이 영상을 받아오기 위한 메소드.
+  void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
+
+  // zed2로 부터 calibration을 위한 카메라 정보를 받아오기 위한 메소드.
+  void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+  void rightcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+
+
   /** \brief Handler method for input cloud messages.             // 들어오는 클라우드 메세지의 handler 메소드
    * 
    * @param laserCloudMsg the new input cloud message to process. // 처리(process)해야 하는 새로 입력된 클라우드 메세지
@@ -139,15 +158,40 @@ private:
    * @param laserCloudIn the new input cloud to process.  // 새로 입력된 포인트 클라우드
    * @param scanTime the scan (message) timestamp.        // 그것이 scan된 시간.
    */
-  void process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime);
+  void process(const pcl::PointCloud<pcl::PointXYZI>& laserCloudIn, const Time& scanTime);
 
+  ////////////////////////////////////////////
+  bool isOverlap(const pcl::PointXYZRGBNormal& point);
+  // void makePixelPoint(const pcl::PointXYZRGBNormal& point, int scanID);
+
+  void calcNorVec(pcl::PointXYZRGBNormal& point, int scanID);
+  ////////////////////////////////////////////
 
 private:
   int _systemDelay = 20;             ///< system startup delay counter
   MultiScanMapper _scanMapper;  ///< mapper for mapping vertical point angles to scan ring IDs. // 포인트의 세로 각도를 라이다의 layer와 매핑해주기 위한 mapper 클래스.
-  std::vector<pcl::PointCloud<pcl::PointXYZI> > _laserCloudScans;                               // 스캔된 포인트 클라우드.
+  std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal> > _laserCloudScans;                               // 스캔된 포인트 클라우드.
+
+  pcl::PointCloud<pcl::PointXYZRGBNormal> _laserCloudSur;
+  
   ros::Subscriber _subLaserCloud;   ///< input cloud message subscriber.                        // 입력되는 포인트클라우드 메세지의 subscriber.
 
+  ////////////////////////////////////////////
+  ros::Subscriber _subRightRectified;
+  ros::Subscriber _subLeftRectified;
+  ros::Subscriber _subDepthRectified;
+
+  ros::Subscriber _subLeftcamInfo;
+  ros::Subscriber _subRightcamInfo;
+
+  bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
+
+  std::set<std::string> overlapCheck;
+  std::set<std::string>::iterator iter;
+
+  //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
+  std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
+  ////////////////////////////////////////////
 };
 
 } // end namespace loam

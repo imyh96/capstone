@@ -5,6 +5,10 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+///////////////////////
+// 모든 .intensity를 .curvature로 바꿈
+///////////////////////
+
 namespace loam
 {
 
@@ -24,27 +28,27 @@ BasicLaserOdometry::BasicLaserOdometry(float scanPeriod, size_t maxIterations) :
    _maxIterations(maxIterations), ///< maximum number of iterations
    _deltaTAbort(0.1),            ///< optimization abort threshold for deltaT
    _deltaRAbort(0.1),            ///< optimization abort threshold for deltaR
-   _cornerPointsSharp(new pcl::PointCloud<pcl::PointXYZI>()),   //edge
-   _cornerPointsLessSharp(new pcl::PointCloud<pcl::PointXYZI>()), //less edge
-   _surfPointsFlat(new pcl::PointCloud<pcl::PointXYZI>()),       // planar
-   _surfPointsLessFlat(new pcl::PointCloud<pcl::PointXYZI>()),   // less planar
-   _laserCloud(new pcl::PointCloud<pcl::PointXYZI>()),
-   _lastCornerCloud(new pcl::PointCloud<pcl::PointXYZI>()),    // 이전 edge
-   _lastSurfaceCloud(new pcl::PointCloud<pcl::PointXYZI>()),   // 이전 planar
-   _laserCloudOri(new pcl::PointCloud<pcl::PointXYZI>()),
-   _coeffSel(new pcl::PointCloud<pcl::PointXYZI>())
+   _cornerPointsSharp(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),   //edge
+   _cornerPointsLessSharp(new pcl::PointCloud<pcl::PointXYZRGBNormal>()), //less edge
+   _surfPointsFlat(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),       // planar
+   _surfPointsLessFlat(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),   // less planar
+   _laserCloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _lastCornerCloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),    // 이전 edge
+   _lastSurfaceCloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),   // 이전 planar
+   _laserCloudOri(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _coeffSel(new pcl::PointCloud<pcl::PointXYZRGBNormal>())
 {}
 
 
 
-void BasicLaserOdometry::transformToStart(const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+void BasicLaserOdometry::transformToStart(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po)
 {
-   float s = (1.f / _scanPeriod) * (pi.intensity - int(pi.intensity));  // 1/주기 = 주파수 , 주파수 * 빛의 세기(원래 값- 정수 값을 빼줘서 소수 부분만 ) 
+   float s = (1.f / _scanPeriod) * (pi.curvature - int(pi.curvature));  // 1/주기 = 주파수 , 주파수 * 빛의 세기(원래 값- 정수 값을 빼줘서 소수 부분만 ) 
 
    po.x = pi.x - s * _transform.pos.x(); //위치 계산 움직인 거리 추정?
    po.y = pi.y - s * _transform.pos.y();
    po.z = pi.z - s * _transform.pos.z();
-   po.intensity = pi.intensity;
+   po.curvature = pi.curvature;
 
    Angle rx = -s * _transform.rot_x.rad();  // 각도 
    Angle ry = -s * _transform.rot_y.rad();
@@ -54,20 +58,20 @@ void BasicLaserOdometry::transformToStart(const pcl::PointXYZI& pi, pcl::PointXY
 
 
 
-size_t BasicLaserOdometry::transformToEnd(pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud)
+size_t BasicLaserOdometry::transformToEnd(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& cloud)
 {
    size_t cloudSize = cloud->points.size();
 
    for (size_t i = 0; i < cloudSize; i++)
    {
-      pcl::PointXYZI& point = cloud->points[i];
+      pcl::PointXYZRGBNormal& point = cloud->points[i];
 
-      float s = (1.f / _scanPeriod) * (point.intensity - int(point.intensity));
+      float s = (1.f / _scanPeriod) * (point.curvature - int(point.curvature));
 
       point.x -= s * _transform.pos.x();
       point.y -= s * _transform.pos.y();
       point.z -= s * _transform.pos.z();
-      point.intensity = int(point.intensity);
+      point.curvature = (int(point.curvature));
 
       Angle rx = -s * _transform.rot_x.rad();
       Angle ry = -s * _transform.rot_y.rad();
@@ -195,6 +199,218 @@ void BasicLaserOdometry::updateIMU(pcl::PointCloud<pcl::PointXYZ> const& imuTran
 }
 
 
+// /////////////////// 중복 제거 알고리즘 ///////////////////
+// bool BasicLaserOdometry::isOverlap(const pcl::PointXYZRGB& point){
+  
+//   // 중복 제거 알고리즘 용.
+  
+//   int preci = 1000;  // mm 범위에 대해 반올림.
+//   float tmpArr[3];
+//   std::string tmpString;
+  
+//   // 1. cm 범위에 대해 반올림. (100을 곱한 뒤, round()후 다시 100을 나눈다.)
+//   tmpArr[0] = round(point.x * preci) / preci;
+//   tmpArr[1] = round(point.y * preci) / preci;
+//   tmpArr[2] = round(point.z * preci) / preci;
+
+//   // 2. 각 좌표를 string으로 바꾼 후, 하나의 string으로 합침.
+//   tmpString = std::to_string(tmpArr[0]) + ',' + std::to_string(tmpArr[1]) + ',' + std::to_string(tmpArr[2]);
+
+//   // 3. 중복된 좌표인지 체크
+//   iter = overlapCheck.find(tmpString);
+
+//   // 4. 만일 존재하는 경우 continue
+//   if(iter != overlapCheck.end())
+//     return true;
+
+//   // 5. 존재하지 않는경우 set에 추가.
+//   overlapCheck.insert(tmpString);
+
+//   return false;
+// }
+
+// ////////////// 임의의 픽셀 포인트 추가 알고리즘 //////////////
+// void BasicLaserOdometry::makePixelPoint(const pcl::PointXYZRGB& point, int scanID){
+//   // 포인트 추가 알고리즘 용.
+//   float lineEq[3];
+//   float tmpVec1[3];
+//   float tmpVec2[3];
+//   float normalVec[3];
+//   float centroid[3];
+//   float v1[3];
+//   float v2[3];
+//   float sizev1, sizev2;
+//   float dist;
+//   float r, maxRadius;
+//   float t;
+//   float inc;
+//   int thresh;
+
+//   int xp, yp, Idx, B, G, R;
+//   float depthL, xl, yl, zl;
+//   uchar* p;
+//   int channels = _mat_left.channels();
+//   cv::Mat_<float> xyz_L(4,1);
+//   cv::Mat_<float> xyz_C(3,1);
+//   std::uint32_t rgb;
+
+//   pcl::PointXYZRGB pixPoint;
+
+//   //std::cout << "in the makePixelPoint function!" << '\n';
+
+//   // 1. 같은 layer의 이전 point들 체크
+//   if(prevPointAt[scanID].size() < 2){
+//     prevPointAt[scanID].push(point);  // 새 점을 포함하는 점이 2개 이하인 경우 저장하고 넘어감.
+//   }
+//   // 3개 이상인 경우
+//   else{   
+//     // 1. 3개의 점들이 서로 직선상에 존재하는지 확인한다.
+//     // D와 d1으로 직선을 만들어, d2가 그 위에 존재하는지 확인한다.
+//     tmpVec1[0] = prevPointAt[scanID].front().x - point.x;
+//     tmpVec1[1] = prevPointAt[scanID].front().y - point.y;
+//     tmpVec1[2] = prevPointAt[scanID].front().z - point.z;
+
+//     lineEq[0] = (prevPointAt[scanID].back().x - point.x)/tmpVec1[0];
+//     lineEq[1] = (prevPointAt[scanID].back().y - point.y)/tmpVec1[1];
+//     lineEq[2] = (prevPointAt[scanID].back().z - point.z)/tmpVec1[2];
+
+//     // 세 점이 직선상에 존재하는 경우 queue에 새 점을 추가하고 넘어간다.
+//     if(lineEq[0] == lineEq[1] && lineEq[0] == lineEq[2]){   
+//       prevPointAt[scanID].pop();
+//       prevPointAt[scanID].push(point);
+//     }
+//     // 직선상에 존재하지 않는 경우.
+//     else
+//     {
+//       // 2. 3개의 점으로 만들어지는 평면 위에 존재하는 서로 직교하는 두개의 벡터 v1과 v2를 구한다.
+//       // 평면의 법선벡터 V를 구한다.
+//       tmpVec2[0] = lineEq[0] * tmpVec1[0];
+//       tmpVec2[1] = lineEq[1] * tmpVec1[1];
+//       tmpVec2[2] = lineEq[2] * tmpVec1[2];
+
+//       // V는 tmpVec1 과 tmpVec2의 외적이다.
+//       normalVec[0] = tmpVec2[1]*tmpVec1[2] - tmpVec2[2]*tmpVec1[1];
+//       normalVec[1] = tmpVec2[2]*tmpVec1[0] - tmpVec2[0]*tmpVec1[2];
+//       normalVec[2] = tmpVec2[0]*tmpVec1[1] - tmpVec2[1]*tmpVec1[0];
+
+//       // 3개의 점으로 만들어지는 삼각형의 무게중심을 구한다.
+//       centroid[0] = (prevPointAt[scanID].front().x + prevPointAt[scanID].back().x + point.x) / 3;
+//       centroid[1] = (prevPointAt[scanID].front().y + prevPointAt[scanID].back().y + point.y) / 3;
+//       centroid[2] = (prevPointAt[scanID].front().z + prevPointAt[scanID].back().z + point.z) / 3;
+
+//       // 무게중심 - p3로 벡터 v1을 구한다.
+//       v1[0] = centroid[0] - point.x;
+//       v1[1] = centroid[1] - point.y;
+//       v1[2] = centroid[2] - point.z;
+
+//       // v1과 V에 수직인 벡터 v2를 구한다. (v1 x V) (두 벡터의 외적)
+//       v2[0] = v1[1]*normalVec[2] - v1[2]*normalVec[1];
+//       v2[1] = v1[2]*normalVec[0] - v1[0]*normalVec[2];
+//       v2[2] = v1[0]*normalVec[1] - v1[1]*normalVec[0];
+
+//       // v1, v2 모두 unit vector로 바꾼다.
+//       sizev1 = sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2]);
+//       sizev2 = sqrt(v2[0]*v2[0] + v2[1]*v2[1] + v2[2]*v2[2]);
+
+//       v1[0] /= sizev1;
+//       v1[1] /= sizev1;
+//       v1[2] /= sizev1;
+
+//       v2[0] /= sizev2;
+//       v2[1] /= sizev2;
+//       v2[2] /= sizev2;
+
+//       // 3. 평면 위에 존재하는 중심이 p3이고, 반지름이 r인 원의 원주상에 존재하는 점들의 좌표를 구한다.
+
+//       dist  = 0.001;
+//       thresh = (2*M_PI/dist);
+//       maxRadius = 0.001;
+      
+//       for(float r = dist; r <= maxRadius; r += dist){
+        
+//         inc = 2 * asin(dist/2*r) * M_PI/180;
+//         t = 0;
+
+//         //std::cout << "in the first for loop!" << '\n';
+
+//         for(int k = 0; k < thresh; k++){
+//           // 해당 좌표로 포인트를 생성한다.
+//           pixPoint.x = point.x + (r*cos(t)) * v1[0] + (r*sin(t)) * v2[0];
+//           pixPoint.y = point.y + (r*cos(t)) * v1[1] + (r*sin(t)) * v2[1];
+//           pixPoint.z = point.z + (r*cos(t)) * v1[2] + (r*sin(t)) * v2[2];
+
+//           // skip NaN and INF valued points.     // NaN 이나 INF인 포인트들은 건너뛴다.
+//           if (!pcl_isfinite(pixPoint.x) ||
+//               !pcl_isfinite(pixPoint.y) ||
+//               !pcl_isfinite(pixPoint.z)) {
+//             continue;
+//           }
+//           // skip zero valued points             // 좌표 값이 0인 포인트들은 건너뛴다.
+//           if (pixPoint.x * pixPoint.x + pixPoint.y * pixPoint.y + pixPoint.z * pixPoint.z < 0.0001) {
+//             continue;
+//           }
+
+//           //std::cout << "x,y,z: " << pixPoint.x << " " << pixPoint.y << " " << pixPoint.z << '\n';
+
+//           if(isOverlap(pixPoint)){
+//             t += inc;
+//             continue;
+//           }
+
+//           // 행렬을 이용해 이미지로 투영한다.
+//           xyz_L << pixPoint.x, pixPoint.y, pixPoint.z, 1; // 라이다 좌표.
+//           xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
+
+//           xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y, z 좌표. s를 나눠주어야 함.
+//           yp = round(xyz_C[1][0]/xyz_C[2][0]);
+
+//           if(0 <= xp && xp < 1280)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+//           {
+//             if(0 <= yp && yp < 720)
+//             {
+//               //std::cout << "xp,yp: " << xp << " " << yp << '\n';
+
+//               // 5. depth가 비슷할 경우 색을 입힌다.
+//               p = _mat_left.ptr<uchar>(yp);
+//               B = p[xp*channels + 0];   // left 이미지에서 컬러값 추출.
+//               G = p[xp*channels + 1];
+//               R = p[xp*channels + 2]; 
+
+//               xl = pixPoint.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
+//               yl = pixPoint.y + 0.066;
+//               zl = pixPoint.z - 0.0444;
+
+//               depthL = sqrt(xl*xl + yl*yl + zl*zl);
+
+//               Idx = xp + 1280*yp;
+
+//               if(std::isfinite(depths[Idx])){
+                
+//                 if(((depthL-0.2) < depths[Idx]) && (depths[Idx] < (depthL+0.2))){
+//                   rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+//                   pixPoint.rgb = *reinterpret_cast<float*>(&rgb);
+
+//                   // 6. 점을 pixelCloud에 입력한다.
+
+//                   //std::cout << "Adding point!" << '\n';
+//                   _pixelCloud.push_back(pixPoint); 
+//                 }
+//               }
+//             }
+//           }  
+
+//           t += inc;
+//         }
+//       }
+//       // 7. prevPointAt[scanID] 에 첫 점을 내보내고 새 점 p3를 저장한다.
+//       prevPointAt[scanID].pop();
+//       prevPointAt[scanID].push(point);
+//     }
+    
+//   }
+// }
+
+
 //LaserOdometry.cpp의 process함수에서 basiclaserodomety의 process함수를 부름
 void BasicLaserOdometry::process()
 {
@@ -213,7 +429,36 @@ void BasicLaserOdometry::process()
       return;
    }
 
-   pcl::PointXYZI coeff;
+   // ////////////// 임의의 픽셀 포인트 추가 알고리즘 //////////////
+   // pcl::PointXYZRGB point;
+   // float lowerBound = -15;
+   // float upperBound = 15;
+   // uint16_t nScanRings = 16;
+   // float _factor = (nScanRings - 1) / (upperBound - lowerBound);
+
+   // for (auto const& pt : _laserCloud->points) {
+   //    if(pt.normal_x != 1 && pt.normal_y != 1)  // 컬러가 없는 포인트들은 넘어감.
+   //       continue;
+
+   //    point.x = pt.x;
+   //    point.y = pt.y;
+   //    point.z = pt.z;
+   //    //point.rgb = pt.rgb;
+
+   //    // calculate vertical point angle and scan ID.                                       // 포인트의 세로 각과 어떤 layer에서 스캔되었는지 계산한다.
+   //    float angle = std::atan(point.y / std::sqrt(point.x * point.x + point.z * point.z)); // 세로각.
+   //    int scanID = int(((angle * 180 / M_PI) - lowerBound) * _factor + 0.5);                                   // 어떤 layer에서 스캔되었는지.
+
+   //    if (scanID >= nScanRings || scanID < 0 ){                    // 만일 layer가 사용하는 라이다의 layer갯수 이상이거나 0보다 작다면 건너뛴다.
+   //       continue;
+   //    }
+
+   //    makePixelPoint(point, scanID);
+
+   // }
+   // ////////////////////////////////////////////////////////
+
+   pcl::PointXYZRGBNormal coeff;
    bool isDegenerate = false;
    Eigen::Matrix<float, 6, 6> matP;
 
@@ -242,7 +487,7 @@ void BasicLaserOdometry::process()
 
       for (size_t iterCount = 0; iterCount < _maxIterations; iterCount++)
       {
-         pcl::PointXYZI pointSel, pointProj, tripod1, tripod2, tripod3;
+         pcl::PointXYZRGBNormal pointSel, pointProj, tripod1, tripod2, tripod3;
          _laserCloudOri->clear();
          _coeffSel->clear();
 
@@ -260,19 +505,18 @@ void BasicLaserOdometry::process()
                if (pointSearchSqDis[0] < 25)
                {
                   closestPointInd = pointSearchInd[0];
-                  int closestPointScan = int(_lastCornerCloud->points[closestPointInd].intensity);
-
+                  int closestPointScan = int((_lastCornerCloud->points[closestPointInd].curvature));
                   float pointSqDis, minPointSqDis2 = 25;
                   for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++)
                   {
-                     if (int(_lastCornerCloud->points[j].intensity) > closestPointScan + 2.5)
+                     if (int((_lastCornerCloud->points[j].curvature)) > closestPointScan + 2.5) 
                      {
                         break;
                      }
 
                      pointSqDis = calcSquaredDiff(_lastCornerCloud->points[j], pointSel);
 
-                     if (int(_lastCornerCloud->points[j].intensity) > closestPointScan)
+                     if (int((_lastCornerCloud->points[j].curvature)) > closestPointScan)
                      {
                         if (pointSqDis < minPointSqDis2)
                         {
@@ -283,14 +527,14 @@ void BasicLaserOdometry::process()
                   }
                   for (int j = closestPointInd - 1; j >= 0; j--)
                   {
-                     if (int(_lastCornerCloud->points[j].intensity) < closestPointScan - 2.5)
+                     if (int((_lastCornerCloud->points[j].curvature)) < closestPointScan - 2.5)
                      {
                         break;
                      }
 
                      pointSqDis = calcSquaredDiff(_lastCornerCloud->points[j], pointSel);
 
-                     if (int(_lastCornerCloud->points[j].intensity) < closestPointScan)
+                     if (int((_lastCornerCloud->points[j].curvature)) < closestPointScan)
                      {
                         if (pointSqDis < minPointSqDis2)
                         {
@@ -345,7 +589,8 @@ void BasicLaserOdometry::process()
                pointProj.x -= la * ld2;
                pointProj.y -= lb * ld2;
                pointProj.z -= lc * ld2;
-
+               
+            
                float s = 1;
                if (iterCount >= 5)
                {
@@ -355,7 +600,7 @@ void BasicLaserOdometry::process()
                coeff.x = s * la;
                coeff.y = s * lb;
                coeff.z = s * lc;
-               coeff.intensity = s * ld2;
+               coeff.curvature = s * ld2;
 
                if (s > 0.1 && ld2 != 0)
                {
@@ -377,19 +622,19 @@ void BasicLaserOdometry::process()
                if (pointSearchSqDis[0] < 25)
                {
                   closestPointInd = pointSearchInd[0];
-                  int closestPointScan = int(_lastSurfaceCloud->points[closestPointInd].intensity);
+                  int closestPointScan = int((_lastSurfaceCloud->points[closestPointInd].curvature));
 
                   float pointSqDis, minPointSqDis2 = 25, minPointSqDis3 = 25;
                   for (int j = closestPointInd + 1; j < surfPointsFlatNum; j++)
                   {
-                     if (int(_lastSurfaceCloud->points[j].intensity) > closestPointScan + 2.5)
+                     if (int((_lastSurfaceCloud->points[j].curvature)) > closestPointScan + 2.5)
                      {
                         break;
                      }
 
                      pointSqDis = calcSquaredDiff(_lastSurfaceCloud->points[j], pointSel);
 
-                     if (int(_lastSurfaceCloud->points[j].intensity) <= closestPointScan)
+                     if (int((_lastSurfaceCloud->points[j].curvature)) <= closestPointScan)
                      {
                         if (pointSqDis < minPointSqDis2)
                         {
@@ -408,14 +653,14 @@ void BasicLaserOdometry::process()
                   }
                   for (int j = closestPointInd - 1; j >= 0; j--)
                   {
-                     if (int(_lastSurfaceCloud->points[j].intensity) < closestPointScan - 2.5)
+                     if (int((_lastSurfaceCloud->points[j].curvature)) < closestPointScan - 2.5)
                      {
                         break;
                      }
 
                      pointSqDis = calcSquaredDiff(_lastSurfaceCloud->points[j], pointSel);
 
-                     if (int(_lastSurfaceCloud->points[j].intensity) >= closestPointScan)
+                     if (int((_lastSurfaceCloud->points[j].curvature)) >= closestPointScan)
                      {
                         if (pointSqDis < minPointSqDis2)
                         {
@@ -476,7 +721,7 @@ void BasicLaserOdometry::process()
                coeff.x = s * pa;
                coeff.y = s * pb;
                coeff.z = s * pc;
-               coeff.intensity = s * pd2;
+               coeff.curvature = (s * pd2);
 
                if (s > 0.1 && pd2 != 0)
                {
@@ -504,7 +749,7 @@ void BasicLaserOdometry::process()
 
          for (int i = 0; i < pointSelNum; i++)  // 각 point들을 이용해 matrix A와 matrix B 생성. 
          {
-            const pcl::PointXYZI& pointOri = _laserCloudOri->points[i];
+            const pcl::PointXYZRGBNormal& pointOri = _laserCloudOri->points[i];
             coeff = _coeffSel->points[i];
 
             float s = 1;
@@ -550,7 +795,7 @@ void BasicLaserOdometry::process()
 
             float atz = s * crx*sry * coeff.x - s * srx * coeff.y - s * crx*cry * coeff.z;
 
-            float d2 = coeff.intensity;
+            float d2 = (coeff.curvature);
 
             matA(i, 0) = arx;
             matA(i, 1) = ary;

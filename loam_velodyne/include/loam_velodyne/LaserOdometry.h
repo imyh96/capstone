@@ -47,6 +47,10 @@
 
 #include "BasicLaserOdometry.h"
 
+// #include <sensor_msgs/Image.h>
+// #include <sensor_msgs/CameraInfo.h>
+// #include "time_utils.h"
+
 namespace loam
 {
 
@@ -56,7 +60,7 @@ namespace loam
   class LaserOdometry : public BasicLaserOdometry
   {
   public:
-    explicit LaserOdometry(float scanPeriod = 0.1, uint16_t ioRatio = 2, size_t maxIterations = 25); //iteration: 반복
+    explicit LaserOdometry(float scanPeriod = 0.1, uint16_t ioRatio = 1, size_t maxIterations = 25); //iteration: 반복  //uint16_t ioRatio = 2 -> 1
 
 
     /************* 셋팅 함수 ***************/    
@@ -67,6 +71,11 @@ namespace loam
      */
     virtual bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
 
+    // ////////////////////////////////////////
+    // void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
+    // void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
+    // void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+    // ////////////////////////////////////////
 
     // 핸들러 = subscribe 해 온 메세지를 이 노드의 적절한 변수로 잘 저장하기 위한 메소드들. 각각이 취하는 행동에는 큰 차이 없다.
 
@@ -135,7 +144,7 @@ namespace loam
     void publishResult();
 
   private:
-    uint16_t _ioRatio;       ///< ratio of input to output frames
+    uint16_t _ioRatio;       ///< ratio of input to output frames.    // laser mapping node의 Hz를 1Hz로 낮추는 원인중 하나.
 
 // 각 데이터들의 시간값.
     ros::Time _timeCornerPointsSharp;      ///< time of current sharp corner cloud
@@ -169,6 +178,18 @@ namespace loam
     ros::Subscriber _subSurfPointsLessFlat;     ///< less flat surface cloud message subscriber
     ros::Subscriber _subLaserCloudFullRes;      ///< full resolution cloud message subscriber
     ros::Subscriber _subImuTrans;               ///< IMU transformation information message subscriber
+    
+    ///////////////////////////////////
+    
+    // ros::Publisher _pubPixelCloud;    // 새로 추가.
+
+    // ros::Subscriber _subLeftRectified;
+    // ros::Subscriber _subDepthRectified;
+    // ros::Subscriber _subLeftcamInfo;
+
+    // Time _sweepStart; 
+
+    // bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
   };
 
 } // end namespace loam

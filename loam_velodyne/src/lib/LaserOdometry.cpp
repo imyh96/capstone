@@ -143,6 +143,7 @@ namespace loam
     _pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2);           // 이 node에서 처리된 후의 full resolution 포인트 클라우드.
     _pubLaserOdometry = node.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 5);                   // 이 node에서 연산된 odometry.
 
+    // _pubPixelCloud            = node.advertise<sensor_msgs::PointCloud2>("/pixel_cloud", 2);
 
     // subscribe to scan registration topics  // scan registraion 노드로 부터 6가지 메세지를 subscribe. 바로 각각의 핸들러 메소드로 보낸다.
     _subCornerPointsSharp = node.subscribe<sensor_msgs::PointCloud2>  // 모서리 edge
@@ -163,9 +164,66 @@ namespace loam
     _subImuTrans = node.subscribe<sensor_msgs::PointCloud2>  // IMU로 부터의 transformation (변환행렬).
       ("/imu_trans", 5, &LaserOdometry::imuTransHandler, this);
 
+
+    // ///////////////////////////////////////////////
+    // _subLeftRectified  = node.subscribe("/zed2/zed_node/left/image_rect_color", 10, &LaserOdometry::imageLeftRectifiedHandler, this);
+
+    // if(!_newLeftcamInfo)
+    //   _subLeftcamInfo = node.subscribe("/zed2/zed_node/left/camera_info", 10, &LaserOdometry::leftcamInfoHandler, this);
+
+    // _subDepthRectified = node.subscribe("/zed2/zed_node/depth/depth_registered", 10, &LaserOdometry::depthHandler, this);
+    // ///////////////////////////////////////////////
+
+
     return true;
   }
   //setup 끝
+
+  // void LaserOdometry::imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg) {
+  //     // ROS_INFO("Left Rectified image received from ZED - Size: %dx%d",
+  //     //          msg->width, msg->height);
+
+  //     cv_bridge::CvImageConstPtr cv_ptr;
+  //     try{
+  //       cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+  //     }
+  //     catch (cv_bridge::Exception& e){
+  //       ROS_ERROR("cv_bridge exception: %s", e.what());
+  //     return;
+  //     }
+
+  //     _mat_left = cv_ptr->image;
+  // }
+
+  // void LaserOdometry::depthHandler(const sensor_msgs::Image::ConstPtr& msg) {
+
+  //     cv_bridge::CvImageConstPtr cv_ptr;
+  //     try{
+  //       cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+  //     }
+  //     catch (cv_bridge::Exception& e){
+  //       ROS_ERROR("cv_bridge exception: %s", e.what());
+  //     return;
+  //     }
+
+  //     _mat_depth = cv_ptr->image;
+
+
+  //     // Get a pointer to the depth values casting the data
+  //     // pointer to floating point
+  //     depths = (float*)(&msg->data[0]);
+  // }
+  // void LaserOdometry::leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg) {
+
+  //     K = (cv::Mat_<float>(3,3) <<  msg->P[0], msg->P[1], msg->P[2],
+  //                                   msg->P[4], msg->P[5], msg->P[6],
+  //                                   msg->P[8], msg->P[9], msg->P[10] );
+
+  //     // 두 행렬 곱하기.
+  //     KE = K * E;
+
+  //     _newLeftcamInfo = true;   // 한번만 시행되도록 flag ON.
+  // }
 
 
   void LaserOdometry::reset() // 리셋
@@ -176,6 +234,9 @@ namespace loam
     _newSurfPointsLessFlat = false;
     _newLaserCloudFullRes = false;
     _newImuTrans = false;
+
+
+
   }
 
 
@@ -242,6 +303,8 @@ namespace loam
     pcl::fromROSMsg(*laserCloudFullResMsg, *laserCloud());
     std::vector<int> indices;
     pcl::removeNaNFromPointCloud(*laserCloud(), *laserCloud(), indices);
+
+    //std::cout << "lasercloud-odometry.rgb: " << laserCloud()->r << std::cout;
     _newLaserCloudFullRes = true;
   }
 
@@ -266,7 +329,7 @@ namespace loam
     while (status)
     {
       ros::spinOnce();
-
+      
       // try processing new data
       process();   
 
@@ -332,7 +395,16 @@ namespace loam
     // publish cloud results according to the input output ratio.   // 입출력 비율에 따라 포인트 클라우드 메세지들(3개)을 publish.
     if (_ioRatio < 2 || frameCount() % _ioRatio == 1)
     {
+      //std::cout << "framecount: " << frameCount() << " ioRatio: " << _ioRatio << std::endl;
+
       ros::Time sweepTime = _timeSurfPointsLessFlat;
+
+      // /////// time stamp 추가 ///////
+      // _sweepStart = fromROSTime(_timeLaserCloudFullRes);
+      // auto sweepStartTime = toROSTime(_sweepStart);
+      // //////////////////////////////
+      // publishCloudMsg(_pubPixelCloud, pixelCloud(), sweepStartTime, "/camera");   // 새로 추가.
+      
       publishCloudMsg(_pubLaserCloudCornerLast, *lastCornerCloud(), sweepTime, "/camera");  // 모서리 클라우드.
       publishCloudMsg(_pubLaserCloudSurfLast, *lastSurfaceCloud(), sweepTime, "/camera");   // 평면 클라우드.
 

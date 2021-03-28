@@ -29,6 +29,9 @@
 // This is an implementation of the algorithm described in the following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
+#define Kalman_Filter 0
+#define lidarRT 0
+#define camRT 1
 
 
 #include "loam_velodyne/BasicLaserMapping.h"
@@ -37,6 +40,8 @@
 
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
+
+int cnt = 0;
 
 namespace loam
 {
@@ -51,7 +56,7 @@ using std::pow;
 BasicLaserMapping::BasicLaserMapping(const float& scanPeriod, const size_t& maxIterations) :
    _scanPeriod(scanPeriod),
    _stackFrameNum(1),
-   _mapFrameNum(5),
+   _mapFrameNum(1),  // 5 -> 1
    _frameCount(0),
    _mapFrameCount(0),
    _maxIterations(maxIterations),
@@ -64,17 +69,17 @@ BasicLaserMapping::BasicLaserMapping(const float& scanPeriod, const size_t& maxI
    _laserCloudHeight(11),
    _laserCloudDepth(21),
    _laserCloudNum(_laserCloudWidth * _laserCloudHeight * _laserCloudDepth),
-   _laserCloudCornerLast(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurfLast(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudFullRes(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudCornerStack(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurfStack(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudCornerStackDS(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurfStackDS(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurround(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurroundDS(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudCornerFromMap(new pcl::PointCloud<pcl::PointXYZI>()),
-   _laserCloudSurfFromMap(new pcl::PointCloud<pcl::PointXYZI>())
+   _laserCloudCornerLast(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudSurfLast(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudFullRes(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudCornerStack(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudSurfStack(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudCornerStackDS(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudSurfStackDS(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudSurround(new pcl::PointCloud<pcl::PointXYZRGB>()),  //PointXYZRGBNormal
+   _laserCloudSurroundDS(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudCornerFromMap(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   _laserCloudSurfFromMap(new pcl::PointCloud<pcl::PointXYZRGBNormal>())
 {
    // frame 수 세는 변수(초기화) / initialize frame counter
    _frameCount = _stackFrameNum - 1;
@@ -86,12 +91,20 @@ BasicLaserMapping::BasicLaserMapping(const float& scanPeriod, const size_t& maxI
    _laserCloudCornerDSArray.resize(_laserCloudNum);
    _laserCloudSurfDSArray.resize(_laserCloudNum);
 
+   //////////////////////////
+   _laserCloudFullResArray.resize(PCNUM);
+   for(int i = 0; i < PCNUM; i++)
+   {
+      _laserCloudFullResArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGB>());
+   }
+   //////////////////////////
+
    for (size_t i = 0; i < _laserCloudNum; i++)
    {
-      _laserCloudCornerArray[i].reset(new pcl::PointCloud<pcl::PointXYZI>());
-      _laserCloudSurfArray[i].reset(new pcl::PointCloud<pcl::PointXYZI>());
-      _laserCloudCornerDSArray[i].reset(new pcl::PointCloud<pcl::PointXYZI>());
-      _laserCloudSurfDSArray[i].reset(new pcl::PointCloud<pcl::PointXYZI>());
+      _laserCloudCornerArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+      _laserCloudSurfArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+      _laserCloudCornerDSArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+      _laserCloudSurfDSArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
    }
 
    // 축소화 시키는 필터 setup / setup down size filters
@@ -206,12 +219,21 @@ void BasicLaserMapping::transformUpdate() // 다음 sweep을 위해 변환행렬
    _transformAftMapped = _transformTobeMapped;
 }
 
-void BasicLaserMapping::pointAssociateToMap(const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+void BasicLaserMapping::pointAssociateToMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
 {
    po.x = pi.x;
    po.y = pi.y;
    po.z = pi.z;
-   po.intensity = pi.intensity;
+
+   ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+   // po.normal_x = pi.normal_x;
+   // po.normal_y = pi.normal_y;
+   // po.normal_z = pi.normal_z;
+   
+   po.rgb = pi.rgb;
+   ////////////////
+
+   // po.curvature = pi.curvature;
 
    rotateZXY(po, _transformTobeMapped.rot_z, _transformTobeMapped.rot_x, _transformTobeMapped.rot_y);
 
@@ -219,22 +241,93 @@ void BasicLaserMapping::pointAssociateToMap(const pcl::PointXYZI& pi, pcl::Point
    po.y += _transformTobeMapped.pos.y();
    po.z += _transformTobeMapped.pos.z();
 }
+void BasicLaserMapping::pointAssociateToMap(const pcl::PointXYZRGB& pi, pcl::PointXYZRGB& po)
+{
+   po.x = pi.x;
+   po.y = pi.y;
+   po.z = pi.z;
 
-void BasicLaserMapping::pointAssociateTobeMapped(const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+   ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+   // po.normal_x = pi.normal_x;
+   // po.normal_y = pi.normal_y;
+   // po.normal_z = pi.normal_z;
+   
+   po.rgb = pi.rgb;
+   ////////////////
+
+   // po.curvature = pi.curvature;
+
+   rotateZXY(po, _transformTobeMapped.rot_z, _transformTobeMapped.rot_x, _transformTobeMapped.rot_y);
+
+   po.x += _transformTobeMapped.pos.x();
+   po.y += _transformTobeMapped.pos.y();
+   po.z += _transformTobeMapped.pos.z();
+}
+void BasicLaserMapping::pointAssociateToMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po)
+{
+   po.x = pi.x;
+   po.y = pi.y;
+   po.z = pi.z;
+
+   //////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+   po.normal_x = pi.normal_x;
+   po.normal_y = pi.normal_y;
+   po.normal_z = pi.normal_z;
+   
+   po.rgb = pi.rgb;
+   ////////////////
+
+   po.curvature = pi.curvature;
+
+   rotateZXY(po, _transformTobeMapped.rot_z, _transformTobeMapped.rot_x, _transformTobeMapped.rot_y);
+
+   po.x += _transformTobeMapped.pos.x();
+   po.y += _transformTobeMapped.pos.y();
+   po.z += _transformTobeMapped.pos.z();
+}
+void BasicLaserMapping::pointAssociateTobeMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGBNormal& po)
 {
    po.x = pi.x - _transformTobeMapped.pos.x();
    po.y = pi.y - _transformTobeMapped.pos.y();
    po.z = pi.z - _transformTobeMapped.pos.z();
-   po.intensity = pi.intensity;
+
+   ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+   po.normal_x = pi.normal_x;
+   po.normal_y = pi.normal_y;
+   po.normal_z = pi.normal_z;
+
+   po.rgb = pi.rgb;
+   ////////////////
+   
+   po.curvature = pi.curvature;
+
+   rotateYXZ(po, -_transformTobeMapped.rot_y, -_transformTobeMapped.rot_x, -_transformTobeMapped.rot_z);
+}
+void BasicLaserMapping::pointAssociateTobeMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
+{
+   po.x = pi.x - _transformTobeMapped.pos.x();
+   po.y = pi.y - _transformTobeMapped.pos.y();
+   po.z = pi.z - _transformTobeMapped.pos.z();
+
+   // ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+   // po.normal_x = pi.normal_x;
+   // po.normal_y = pi.normal_y;
+   // po.normal_z = pi.normal_z;
+
+   po.rgb = pi.rgb;
+   ////////////////
+   
+   // po.curvature = pi.curvature;
 
    rotateYXZ(po, -_transformTobeMapped.rot_y, -_transformTobeMapped.rot_x, -_transformTobeMapped.rot_z);
 }
 
 void BasicLaserMapping::transformFullResToMap()
 {
-   // transform full resolution input cloud to map.      // 입력된 full resolution cloud를 지도로 이어 붙이는 곳 
-   for (auto& pt : *_laserCloudFullRes)
+   // transform full resolution input cloud to map.      // 현재 스캔중인 full resolution cloud를 보여주는 함수
+   for (auto& pt : *_laserCloudFullRes){
       pointAssociateToMap(pt, pt);
+   }
 }
 
 bool BasicLaserMapping::createDownsizedMap()
@@ -248,18 +341,209 @@ bool BasicLaserMapping::createDownsizedMap()
 
    // accumulate map cloud.      // map cloud를 축적한다.
    _laserCloudSurround->clear();
-   for (auto ind : _laserCloudSurroundInd)
-   {
-      *_laserCloudSurround += *_laserCloudCornerArray[ind];
-      *_laserCloudSurround += *_laserCloudSurfArray[ind];
-   }
 
-   // down size map cloud.    // map cloud를 다운 사이즈한다.
-   _laserCloudSurroundDS->clear();
-   _downSizeFilterCorner.setInputCloud(_laserCloudSurround);
-   _downSizeFilterCorner.filter(*_laserCloudSurroundDS);
+   // for (int i = 0; i < PCNUM; i++)
+   // {
+   //    *_laserCloudSurround += *_laserCloudFullResArray[i];
+   // }
+   
+   // std::cout << "size of _laserCloudFullResColorStack: " << _laserCloudFullResColorStack.size() << std::endl;
+   // *_laserCloudSurround += _laserCloudFullResColorStack;  // 업데이트된 full res color pc를 laserCloudSurround로 입력.
+   //*_laserCloudSurroundColor += _laserCloudFullResColor;
+
+   //ply 포맷으로 포인트 클라우드 저장.
+   // pcl::io::savePLYFileBinary("/home/cgvlab/ply_test/output_zedTrans79_speed.ply", *_laserCloudSurround);
+
+   _laserCloudSurround->clear();
+   *_laserCloudSurround += _laserCloudFullResColor;
+
+   newPointCloud = true;
+
+   // // down size map cloud.    // map cloud를 다운 사이즈한다.
+   // _laserCloudSurroundDS->clear();
+   // _downSizeFilterCorner.setInputCloud(_laserCloudSurround);
+   // _downSizeFilterCorner.filter(*_laserCloudSurroundDS);
+
+   // _sweepCnt++;
+   // std::cout << "_sweepCnt: " << _sweepCnt << std::endl;
    return true;
 }
+
+
+
+/////////////////// 중복 제거 알고리즘 ///////////////////
+bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGB& point){
+  
+   // 중복 제거 알고리즘 용.
+
+   int preci = 500;  // mm 범위에 대해 반올림.
+   float tmpArr[3];
+   std::string tmpString;
+
+   // 1. mm 범위에 대해 반올림. (preci를 곱한 뒤, round()후 다시 preci를 나눈다.)
+   tmpArr[0] = round(point.x * preci) / preci;
+   tmpArr[1] = round(point.y * preci) / preci;
+   tmpArr[2] = round(point.z * preci) / preci;
+
+   // 2. 각 좌표를 string으로 바꾼 후, 하나의 string으로 합침.
+   tmpString = std::to_string(tmpArr[0]) + ',' + std::to_string(tmpArr[1]) + ',' + std::to_string(tmpArr[2]);
+
+   // 3. 중복된 좌표인지 체크
+   iter = overlapCheck.find(tmpString);
+
+   // 4. 만일 존재하는 경우 continue
+   if(iter != overlapCheck.end()){
+      //cnt++;
+      //cout << "cnt: " << cnt << '\n';
+      return true;
+   }
+      
+
+   // 5. 존재하지 않는경우 set에 추가.
+   overlapCheck.insert(tmpString);
+
+   return false;
+}
+
+// ////////////// 임의의 픽셀 포인트 추가 알고리즘 //////////////
+// void BasicLaserMapping::makePixelPoint(const pcl::PointXYZRGBNormal& point){
+   
+//    float V[3];
+//    float v1[3];
+//    float v2[3];
+//    float sizev1, sizev2;
+
+//    float dist;
+//    float r, maxRadius;
+//    float t;
+//    float inc;
+//    int thresh;
+
+//    int xp, yp, Idx, B, G, R;
+//    float depthL, xl, yl, zl;
+//    uchar* p;
+//    int channels = _mat_left.channels();
+//    cv::Mat_<float> xyz_L(4,1);
+//    cv::Mat_<float> xyz_C(3,1);
+//    std::uint32_t rgb;
+
+//    pcl::PointXYZRGB pixPoint;
+
+
+//    // V에 수직인 벡터 v1을 구한다.
+//    V[0] = point.normal_x;
+//    V[1] = point.normal_y;
+//    V[2] = point.normal_z;
+
+//    if(abs(V[0]) > abs(V[2])){
+//       v1[0] = V[1];
+//       v1[1] = -V[0];
+//       v1[2] = 0.0;
+//    }
+//    else{
+//       v1[0] = 0.0;
+//       v1[1] = V[2];
+//       v1[2] = -V[1];
+//    }
+
+//    // v1과 V에 수직인 벡터 v2를 구한다. (v1 x V) (두 벡터의 외적)
+//    v2[0] = v1[1]*V[2] - v1[2]*V[1];
+//    v2[1] = v1[2]*V[0] - v1[0]*V[2];
+//    v2[2] = v1[0]*V[1] - v1[1]*V[0];
+
+//    // v1, v2 모두 unit vector로 바꾼다.
+//    sizev1 = sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2]);
+//    sizev2 = sqrt(v2[0]*v2[0] + v2[1]*v2[1] + v2[2]*v2[2]);
+
+//    v1[0] /= sizev1;
+//    v1[1] /= sizev1;
+//    v1[2] /= sizev1;
+
+//    v2[0] /= sizev2;
+//    v2[1] /= sizev2;
+//    v2[2] /= sizev2;
+
+//    // 3. 평면 위에 존재하는 중심이 p3이고, 반지름이 r인 원의 원주상에 존재하는 점들의 좌표를 구한다.
+//    dist  = 0.001;
+//    maxRadius = 0.005;
+//    r = dist;
+//    while(r <= maxRadius){
+      
+//       inc = 2 * asin((dist/2)/r);   // asin이 return해 주는 값은 이미 radian 값이므로 따로 바꿔주지 않아도 된다.
+//       t = 0;
+
+//       while(t < 2*M_PI){
+//          // 해당 좌표로 포인트를 생성한다.
+//          pixPoint.x = point.x + (r*cos(t)) * v1[0] + (r*sin(t)) * v2[0];
+//          pixPoint.y = point.y + (r*cos(t)) * v1[1] + (r*sin(t)) * v2[1];
+//          pixPoint.z = point.z + (r*cos(t)) * v1[2] + (r*sin(t)) * v2[2];
+
+//          // skip NaN and INF valued points.     // NaN 이나 INF인 포인트들은 건너뛴다.
+//          if (!pcl_isfinite(pixPoint.x) ||
+//              !pcl_isfinite(pixPoint.y) ||
+//              !pcl_isfinite(pixPoint.z)) {
+//             t += inc;
+//             continue;
+//          }
+//             // skip zero valued points             // 좌표 값이 0인 포인트들은 건너뛴다.
+//          if (pixPoint.x * pixPoint.x + pixPoint.y * pixPoint.y + pixPoint.z * pixPoint.z < 0.0001) {
+//             t += inc;
+//             continue;
+//          }
+
+//          // 이전에 입력했던 점인지 체크한다.
+//          if(isOverlap(pixPoint)){
+//             t += inc;
+//             continue;
+//          }
+
+//          // 색을 입히기 위해 행렬을 이용해 이미지로 투영한다.
+//          xyz_L << pixPoint.x, pixPoint.y, pixPoint.z, 1; // 라이다 좌표.
+//          xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
+
+//          xp = round(xyz_C[0][0]/xyz_C[2][0]);   // 변환한 x, y, z 좌표. s를 나눠주어야 함.
+//          yp = round(xyz_C[1][0]/xyz_C[2][0]);   // 반올림하여 정수 좌표로 만들어준다.
+
+//          if(0 <= xp && xp < 1280)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+//          {
+//             if(0 <= yp && yp < 720)
+//             {
+//                // 5. depth가 비슷할 경우 색을 입힌다.
+//                p = _mat_left.ptr<uchar>(yp);
+//                B = p[xp*channels + 0];   // left 이미지에서 컬러값 추출.
+//                G = p[xp*channels + 1];
+//                R = p[xp*channels + 2]; 
+
+//                xl = pixPoint.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
+//                yl = pixPoint.y + 0.066;
+//                zl = pixPoint.z - 0.0444;
+
+//                depthL = sqrt(xl*xl + yl*yl + zl*zl);
+
+//                Idx = xp + 1280*yp;
+
+//                if(std::isfinite(depths[Idx])){
+//                   if(((depthL-0.2) < depths[Idx]) && (depths[Idx] < (depthL+0.2))){
+//                      // 점에 rgb값을 할당한다.
+//                      rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+//                      pixPoint.rgb = *reinterpret_cast<float*>(&rgb);
+
+//                      // 6. 점을 월드 좌표계로 옮긴 후, laserCloud에 입력한다.
+//                      pointAssociateToMap(pixPoint, pixPoint);
+//                      _laserCloudFullResColor.push_back(pixPoint);
+//                      _laserCloudFullResColorStack.push_back(pixPoint);
+//                   }
+//                }
+//             }
+//          }  
+
+//          t += inc;
+//       }
+
+//       r += dist;
+//    }
+
+// } // makePixelPoint() end
 
 
 
@@ -275,15 +559,32 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
    _laserOdometryTime = laserOdometryTime;   // time stamp.
 
-   pcl::PointXYZI pointSel;
+   pcl::PointXYZRGBNormal pointSel;
+   ///////////////////////////
+   pcl::PointXYZRGB pointRGB;    // PointXYZRGBNormal -> PointXYZRGB 타입으로 바꿔주기 위한 포인트 변수.
+
+#if Kalman_Filter 
+   if(firstRun)
+      saveZedMapPoseStart(_zedWorldTrans);   // A를 생성하기위한 첫번째 trans 저장.
+#endif
+
+   ///////////////////////////
 
 
-   // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
-                                       // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
+   // // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
+   //                                     // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
+#if lidarRT   
    transformAssociateToMap();
+#endif
 
+#if camRT
+   /////////////////////////////////////////////////////
+   saveZedMapPoseEnd(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
+   /////////////////////////////////////////////////////
+#endif
+   
 
-   // subscribe 해 온 두 특징점 클라우드의 각 포인트들을 복사해서, 
+   // 새로 subscribe 해 온 두 특징점 클라우드(_laserCloudCornerLast,_laserCloudSurfLast)의 각 포인트들을 복사해서, 
    // 복사한 점들을 _transformTobeMapped를 이용해 기존 map 좌표계 상에 투영(project)한 것들의 클라우드인 _laserCloudCornerStack와 _laserCloudSurfStack를 생성.
    for (auto const& pt : _laserCloudCornerLast->points)
    {
@@ -301,7 +602,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    ///////////////////////  map 클라우드의 특징점들 주위 영역 내에 있는 point들로 이루어진 surround cloud 생성  ///////////////////////
 
    // Y축 상의 점 하나 생성.
-   pcl::PointXYZI pointOnYAxis;
+   pcl::PointXYZRGBNormal pointOnYAxis;
    pointOnYAxis.x = 0.0;
    pointOnYAxis.y = 10.0;
    pointOnYAxis.z = 0.0;
@@ -449,7 +750,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
       centerCubeK--;
       _laserCloudCenDepth--;
    }
-
+   
    _laserCloudValidInd.clear();
    _laserCloudSurroundInd.clear();
    for (int i = centerCubeI - 2; i <= centerCubeI + 2; i++)
@@ -467,7 +768,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                float centerY = 50.0f * (j - _laserCloudCenHeight);
                float centerZ = 50.0f * (k - _laserCloudCenDepth);
 
-               pcl::PointXYZI transform_pos = (pcl::PointXYZI) _transformTobeMapped.pos;
+               pcl::PointXYZRGBNormal transform_pos = (pcl::PointXYZRGBNormal) _transformTobeMapped.pos;
 
                bool isInLaserFOV = false;
                for (int ii = -1; ii <= 1; ii += 2)
@@ -476,7 +777,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                   {
                      for (int kk = -1; kk <= 1; kk += 2)
                      {
-                        pcl::PointXYZI corner;
+                        pcl::PointXYZRGBNormal corner;
                         corner.x = centerX + 25.0f * ii;
                         corner.y = centerY + 25.0f * jj;
                         corner.z = centerZ + 25.0f * kk;
@@ -511,8 +812,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    //////////////////////////////////////////////////////////////////////
 
 
-
-   //prepare valid map corner and surface cloud for pose optimization.     // 포즈 최적화를 위해 유효(valid)한 'map cloud의 특징점(corner & surface) 클라우드'를 준비
+   ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+   // 새롭게 subscribe해온 특징점들중 valid한 것들을 이용해 최적화된 변환행렬인 _transformTobeMapped를 구한다.//
+   // prepare valid map corner and surface cloud for pose optimization.     // 포즈 최적화를 위해 '유효(valid)한 map cloud의 특징점(corner & surface)들의 클라우드'를 준비
    _laserCloudCornerFromMap->clear();
    _laserCloudSurfFromMap->clear();
    for (auto const& ind : _laserCloudValidInd)
@@ -543,12 +845,148 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    _laserCloudCornerStack->clear();
    _laserCloudSurfStack->clear();
 
-
+#if lidarRT 
    // run pose optimization.        // 포즈 최적화를 시행한다.
-   optimizeTransformTobeMapped();   // Odometry 알고리즘과 같이, 3차원 KD tree를 이용해 d 를 최소화 하는 변환행렬을 구한다.
+   optimizeTransformTobeMapped();   // Odometry 알고리즘과 같이, 3차원 KD tree를 이용해 d 를 최소화 하는 변환행렬(_transformTobeMapped)을 구한다.
+   /////////////////////////////////////////////////////////////////////////////////////////////////////////
+#endif
+
+   
+#if Kalman_Filter 
+   ////////////////////////////////칼만 필터 적용////////////////////////////////
+
+   // 카메라Trans를 라이다Trans를 이용해 최적화.
+   // 최적화한 Trans는 다음 융합을 위한 A행렬에 사용된다.
+   KalmanFilter();
+
+   ///////////////////////////////////////////////////////////////////////////
+#endif
+
+   ////////////////////////////////////////
+
+  int xp, yp, Idx, B, G, R;
+  
+  uchar* p;
+  int channels = _mat_left.channels();
+
+  float depthL, xl, yl, zl;
+  cv::Mat_<float> xyz_C(3,1);
+  cv::Mat_<float> xyz_L(4,1);
+  
+  int zedepth, lidepth;
+  float zedepthf, lidepthf;
+  std::uint32_t rgb;
 
 
-   // store down sized corner stack points in corresponding cube clouds.      // 대응하는 cube 클라우드에 축소(down size)된 corner stack points 저장.
+  // cam to lidar용.
+  cv::Mat_<float> xy_C(3,1);
+  ////////////////////////////////////////
+
+  ////////////////////////////////////////
+  double fx_d = K.at<float>(0,0);
+  double fy_d = K.at<float>(1,1);
+  double cx_d = K.at<float>(0,2);
+  double cy_d = K.at<float>(1,2);
+
+  int pixRange = 1; // 1 = 3x3, 2 = 5x5, 3 = 7x7 
+
+  pcl::PointXYZRGB pixpoint;
+  ////////////////////////////////////////
+   
+   
+   ///////////////////////////////////////////////////////
+   // full res pc의 포인트들 중, 컬러가 입혀진 포인트들만 world좌표계로 변환, 포인트 타입 변환 후, _laserCloudFullResColorStack에 축적한다. 
+   _laserCloudFullResColor.clear();
+   for (auto& pt : *_laserCloudFullRes){
+      
+      // 해당 점에 색이 입혀진 경우.
+      if(pt.normal_z == 1 && pt.normal_y == 1 && pt.normal_x == 1){
+
+         xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
+         xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
+
+         xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
+         yp = round(xyz_C[1][0]/xyz_C[2][0]);
+
+         if(pixRange <= xp && xp < 1280-pixRange)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+         //if(321 <= xp && xp < 960)
+         {
+            if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
+            {
+               xl = pt.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
+               yl = pt.y + 0.066;
+               zl = pt.z - 0.0444;
+
+               depthL = sqrt(xl*xl + yl*yl + zl*zl);
+
+               Idx = xp + 1280*yp;
+
+               if(std::isfinite(depths[Idx])){
+                  zedepthf = depths[Idx];
+                  lidepthf = depthL;
+
+
+                  //made by INHYEOK, AVERAGEING FILTER
+                  float zed_dep_sum = 0;
+                  float zed_dep_avg = 0;
+                  int array_num = 0;
+                  for(int x =  xp-pixRange; x < xp+pixRange; x++){
+                     for(int y = yp-pixRange; y < yp+pixRange; y++){
+                        int i = x + 1280 * y;
+                        zed_dep_sum += depths[i];
+                        array_num ++;
+                     }
+                  }
+                  zed_dep_avg = (zed_dep_sum / array_num);
+                  if(((lidepthf-0.15) < zed_dep_avg) && (zed_dep_avg < (lidepthf+0.15)))
+                  {
+                  // //if(((lidepthf-0.2) < zedepthf) && (zedepthf < (lidepthf+0.2))){
+                  //    // //original
+                     for(int x = xp-pixRange; x < xp+pixRange; x++){
+                       for(int y = yp-pixRange; y < yp+pixRange; y++){
+
+                           pixpoint.x = -((x - cx_d) * depthL / fx_d);
+                           pixpoint.y = -((y - cy_d) * depthL / fy_d);
+                           pixpoint.z = depthL;
+
+                           p = _mat_left.ptr<uchar>(y);
+                           B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
+                           G = p[x*channels + 1];
+                           R = p[x*channels + 2]; 
+
+                           rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+                           pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
+
+                           pointAssociateToMap(pixpoint, pointRGB);
+
+                           if(!isOverlap(pointRGB)){
+                              _laserCloudFullResColor.push_back(pointRGB);
+                              
+                              if(SInd > PCNUM-1)
+                                 SInd = 0;
+                              _laserCloudFullResArray[SInd]->push_back(pointRGB);
+                              
+                           }
+                        }
+                     }
+
+                     SInd++;
+                     // pointAssociateToMap(pt, pointRGB);
+
+                     // if(!isOverlap(pointRGB)){
+                     //    _laserCloudFullResColor.push_back(pointRGB);
+                     //    _laserCloudFullResColorStack.push_back(pointRGB);
+                     
+                  }
+               }
+            }
+         }  
+      }  
+   }
+   ///////////////////////////////////////////////////////
+   
+
+   // store down sized corner stack points in corresponding cube clouds.      // 대응하는 cube 클라우드에 축소(down size)된 corner stack points를 다시 map으로 위치 이동후 저장.
    for (int i = 0; i < laserCloudCornerStackNum; i++)
    {
       pointAssociateToMap(_laserCloudCornerStackDS->points[i], pointSel);
@@ -569,7 +1007,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
          _laserCloudCornerArray[cubeInd]->push_back(pointSel);
       }
    }
-   // store down sized surface stack points in corresponding cube clouds.     // 대응하는 cube 클라우드에 축소(down size)된 surface stack points 저장.
+   // store down sized surface stack points in corresponding cube clouds.     // 대응하는 cube 클라우드에 축소(down size)된 surface stack points를 다시 map으로 위치 이동후 저장.
    for (int i = 0; i < laserCloudSurfStackNum; i++)
    {
       pointAssociateToMap(_laserCloudSurfStackDS->points[i], pointSel);
@@ -590,6 +1028,10 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
          _laserCloudSurfArray[cubeInd]->push_back(pointSel);
       }
    }
+
+   
+
+
    // down size all valid (within field of view) feature cube clouds.      // 모든 유효(FOV 내에 존재함)한 feature cube cloud들을 down sizing한다. 
    for (auto const& ind : _laserCloudValidInd)
    {
@@ -607,11 +1049,18 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    }
 
 
-   // odometry로 부터 subscribe하여 저장해 둔 full resolution 포인트 클라우드를, 최척화 한 변환행렬을 이용해 map에 이어 붙인다.
+   // odometry로 부터 subscribe하여 저장해 둔 full resolution 포인트 클라우드를, 최척화 한 변환행렬을 이용해 현재 라이다의 pose에 맞춰 보여준다.
    transformFullResToMap();
 
-   // 포인트들을 고르게 분포시키기 위해 map 클라우드를 복셀 사이즈가 (5cm)^3인 voxel grid 필터로 다운 사이징한다.
+   // 포인트들을 고르게 분포시키기 위해 map 클라우드를 복셀 사이즈가 (5cm)^3인 voxel grid 필터로 다운 사이징한, map을 생성한다.
    _downsizedMapCreated = createDownsizedMap();
+
+   // // _transformTobeMapped의 내부 값들 확인용
+   // ROS_INFO("Received pose in '%s' frame : X: %.2f Y: %.2f Z: %.2f - R: %.2f P: %.2f Y: %.2f",
+   //          "LIDAR",
+   //          _transformTobeMapped.pos.x(), _transformTobeMapped.pos.y(), _transformTobeMapped.pos.z(),
+   //          _transformTobeMapped.rot_x.deg(), _transformTobeMapped.rot_y.deg(), _transformTobeMapped.rot_z.deg());
+
 
    return true;
 }  
@@ -636,13 +1085,104 @@ void BasicLaserMapping::updateOdometry(double pitch, double yaw, double roll, do
    _transformSum.pos.z() = float(z);
 }
 
+/////////////////////////////////////////////////////////
+void BasicLaserMapping::updateZedPose(double pitch, double yaw, double roll, double x, double y, double z)
+{
+   _zedWorldTrans.rot_x = pitch;
+   _zedWorldTrans.rot_y = yaw;
+   _zedWorldTrans.rot_z = roll;
+
+   _zedWorldTrans.pos.x() = float(y);
+   _zedWorldTrans.pos.y() = float(z);
+   _zedWorldTrans.pos.z() = float(x);
+}
+
+void BasicLaserMapping::saveZedMapPoseStart(Twist const& twist){
+   _zedTransStart = twist;
+}
+void BasicLaserMapping::saveZedMapPoseEnd(Twist const& twist){
+#if Kalman_Filter 
+   if(!firstRun)
+      _zedTransStart = _zedTransEnd;
+   _zedTransEnd = twist;
+#endif
+   _transformTobeMapped = twist;
+}
+
+void BasicLaserMapping::KalmanFilter()
+{
+   // A 생성하기
+   // tmp = (cv::Mat_<float>(6,1) <<_zedTransEnd.pos.x() - _zedTransStart.pos.x(),
+   //                               _zedTransEnd.pos.y() - _zedTransStart.pos.y(),
+   //                               _zedTransEnd.pos.z() - _zedTransStart.pos.z(),
+   //                               _zedTransEnd.rot_x.rad() - _zedTransStart.rot_x.rad(),
+   //                               _zedTransEnd.rot_y.rad() - _zedTransStart.rot_y.rad(),
+   //                               _zedTransEnd.rot_z.rad() - _zedTransStart.rot_z.rad() );
+
+
+   // A = (cv::Mat_<float>(6,6) <<  (2 - _zedTransStart.pos.x()/_zedTransEnd.pos.x()), 0, 0, 0, 0, 0,
+   //                               0, (2 - _zedTransStart.pos.y()/_zedTransEnd.pos.y()), 0, 0, 0, 0,
+   //                               0, 0, (2 - _zedTransStart.pos.z()/_zedTransEnd.pos.z()), 0, 0, 0,
+   //                               0, 0, 0, (2 - _zedTransStart.rot_x.rad()/_zedTransEnd.rot_x.rad()), 0, 0,
+   //                               0, 0, 0, 0, (2 - _zedTransStart.rot_y.rad()/_zedTransEnd.rot_y.rad()), 0,
+   //                               0, 0, 0, 0, 0, (2 - _zedTransStart.rot_z.rad()/_zedTransEnd.rot_z.rad())   );
+
+   A = (cv::Mat_<float>(6,6) <<  _zedTransEnd.pos.x()/_zedTransStart.pos.x(), 0, 0, 0, 0, 0,
+                                 0, _zedTransEnd.pos.y()/_zedTransStart.pos.y(), 0, 0, 0, 0,
+                                 0, 0, _zedTransEnd.pos.z()/_zedTransStart.pos.z(), 0, 0, 0,
+                                 0, 0, 0, _zedTransEnd.rot_x.rad()/_zedTransStart.rot_x.rad(), 0, 0,
+                                 0, 0, 0, 0, _zedTransEnd.rot_y.rad()/_zedTransStart.rot_y.rad(), 0,
+                                 0, 0, 0, 0, 0, _zedTransEnd.rot_z.rad()/_zedTransStart.rot_z.rad()   );
+   
+   // A = iden + tmp;  // change to discrete system.
+
+   // 이번 sweep의 z(측정값) 저장.
+   //z = (cv::Mat_<float>(6,1) << _transformTobeMapped.pos.x(), _transformTobeMapped.pos.y(), _transformTobeMapped.pos.z(), _transformTobeMapped.rot_x.rad(), _transformTobeMapped.rot_y.rad(), _transformTobeMapped.rot_z.rad());
+   z = (cv::Mat_<float>(6,1) << _transformSum.pos.x(), _transformSum.pos.y(), _transformSum.pos.z(), _transformSum.rot_x.rad(), _transformSum.rot_y.rad(), _transformSum.rot_z.rad());
+
+   if(firstRun){
+      // x와 P의 초기값 입력. = 0.초깃값 선정
+      x = (cv::Mat_<float>(6,1) << _zedTransEnd.pos.x(), _zedTransEnd.pos.y(), _zedTransEnd.pos.z(), _zedTransEnd.rot_x.rad(), _zedTransEnd.rot_y.rad(), _zedTransEnd.rot_z.rad());
+      P = Mat::eye(6, 6, CV_32F);
+
+      std::cout << "initialized Kalman filter!" << std::endl;
+      firstRun = false;
+   }
+
+   // 1. 추정값과 오차 공분산 예측
+   xp = A * x;
+   Pp = A * P * A.t() + Q;
+
+   // 2. 칼만 이득 계산
+   tmp = H*Pp*H.t() + R;
+   K_ = Pp * H.t() * tmp.inv();
+
+   // 3. 추정값 계산
+   x = xp + K_ * (z - H*xp);
+
+   // 4. 오차 공분산 계산
+   P = Pp - K_*H*Pp;
+
+
+   // 도출된 R|t 를 입력.
+   Vector3 posi(x.at<float>(0), x.at<float>(1), x.at<float>(2));
+   _transformTobeMapped.pos.x() = posi.x();
+   _transformTobeMapped.pos.y() = posi.y();
+   _transformTobeMapped.pos.z() = posi.z();
+
+   _transformTobeMapped.rot_x = Angle(x.at<float>(3));
+   _transformTobeMapped.rot_y = Angle(x.at<float>(4));
+   _transformTobeMapped.rot_z = Angle(x.at<float>(5));
+}
+/////////////////////////////////////////////////////////
+
 void BasicLaserMapping::updateOdometry(Twist const& twist)
 {
    _transformSum = twist;
 }
 
-nanoflann::KdTreeFLANN<pcl::PointXYZI> kdtreeCornerFromMap;
-nanoflann::KdTreeFLANN<pcl::PointXYZI> kdtreeSurfFromMap;
+nanoflann::KdTreeFLANN<pcl::PointXYZRGBNormal> kdtreeCornerFromMap;
+nanoflann::KdTreeFLANN<pcl::PointXYZRGBNormal> kdtreeSurfFromMap;
 
 
 
@@ -652,7 +1192,7 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
    if (_laserCloudCornerFromMap->size() <= 10 || _laserCloudSurfFromMap->size() <= 100)
       return;
 
-   pcl::PointXYZI pointSel, pointOri, /*pointProj, */coeff;
+   pcl::PointXYZRGBNormal pointSel, pointOri, /*pointProj, */coeff;
 
    std::vector<int> pointSearchInd(5, 0);
    std::vector<float> pointSearchSqDis(5, 0);
@@ -764,7 +1304,7 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
                coeff.x = s * la;
                coeff.y = s * lb;
                coeff.z = s * lc;
-               coeff.intensity = s * ld2;
+               coeff.curvature = (s * ld2);// * FI_COEF;
 
                if (s > 0.1)
                {
@@ -829,7 +1369,7 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
                coeff.x = s * pa;
                coeff.y = s * pb;
                coeff.z = s * pc;
-               coeff.intensity = s * pd2;
+               coeff.curvature = s * pd2; //* FI_COEF;
 
                if (s > 0.1)
                {
@@ -882,7 +1422,7 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
          matA(i, 3) = coeff.x;
          matA(i, 4) = coeff.y;
          matA(i, 5) = coeff.z;
-         matB(i, 0) = -coeff.intensity;
+         matB(i, 0) = -(coeff.curvature );/// FI_COEF
       }
 
       matAt = matA.transpose();
@@ -951,3 +1491,48 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
 
 
 } // end namespace loam
+
+
+////////////////////////////////////////////////////////
+// void BasicLaserMapping::pointAssociateToZedMap(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
+// {
+//    po.x = pi.x;
+//    po.y = pi.y;
+//    po.z = pi.z;
+
+//    ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+//    // po.normal_x = pi.normal_x;
+//    // po.normal_y = pi.normal_y;
+//    // po.normal_z = pi.normal_z;
+   
+//    po.rgb = pi.rgb;
+//    ////////////////
+
+//    // po.curvature = pi.curvature;
+
+//    rotateZXY(po, _zedWorldTransMapped.rot_z, _zedWorldTransMapped.rot_x, _zedWorldTransMapped.rot_y);
+
+//    po.x += _zedWorldTransMapped.pos.x();  //_zedWorldTrans
+//    po.y += _zedWorldTransMapped.pos.y();
+//    po.z += _zedWorldTransMapped.pos.z();
+// }
+
+// void BasicLaserMapping::pointAssociateTobeZedMapped(const pcl::PointXYZRGBNormal& pi, pcl::PointXYZRGB& po)
+// {
+//    po.x = pi.x - _zedWorldTransMapped.pos.x();
+//    po.y = pi.y - _zedWorldTransMapped.pos.y();
+//    po.z = pi.z - _zedWorldTransMapped.pos.z();
+
+//    // ////////////////  // 변환할 때 rgb값과 normal값도 함께 넘겨주어야 함.
+//    // po.normal_x = pi.normal_x;
+//    // po.normal_y = pi.normal_y;
+//    // po.normal_z = pi.normal_z;
+
+//    po.rgb = pi.rgb;
+//    ////////////////
+   
+//    // po.curvature = pi.curvature;
+
+//    rotateYXZ(po, -_zedWorldTransMapped.rot_y, -_zedWorldTransMapped.rot_x, -_zedWorldTransMapped.rot_z);
+// }
+////////////////////////////////////////////////////////

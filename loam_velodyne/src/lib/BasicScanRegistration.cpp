@@ -25,7 +25,7 @@ RegistrationParams::RegistrationParams(const float& scanPeriod_,
       surfaceCurvatureThreshold(surfaceCurvatureThreshold_)
 {};
 
-void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZI>> const& laserCloudScans)
+void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>> const& laserCloudScans)
 {
   // reset internal buffers and set IMU start state based on current scan time.   // 이전 스캔에서 생성했던 포인트 클라우드들을 리셋하고 현재 스캔이 수행되는 시간(scanTime)을 기반으로 IMU start state를 새롭게 세팅한다.
   reset(scanTime);  
@@ -67,7 +67,9 @@ void BasicScanRegistration::reset(const Time& scanTime)
   if (true/*newSweep*/) {
     _sweepStart = scanTime;
 
-    // clear cloud buffers    
+    // clear cloud buffers   
+    // _pixelCloud.clear();  // 새로 추가.
+
     _laserCloud.clear();
     _cornerPointsSharp.clear();
     _cornerPointsLessSharp.clear();
@@ -102,7 +104,7 @@ void BasicScanRegistration::updateIMUData(Vector3& acc, IMUState& newState)
 }
 
 
-void BasicScanRegistration::projectPointToStartOfSweep(pcl::PointXYZI& point, float relTime)
+void BasicScanRegistration::projectPointToStartOfSweep(pcl::PointXYZRGBNormal& point, float relTime)
 {
   // project point to the start of the sweep using corresponding IMU data. 
   // 대응하는 IMU 데이터를 이용해, sweep의 시작 시점으로 각 포인트들을 투영한다.
@@ -118,12 +120,15 @@ void BasicScanRegistration::setIMUTransformFor(const float& relTime)
 {
   interpolateIMUStateFor(relTime, _imuCur);         // 입력한 시간(relTime)에 대해 IMU state를 보간(interpolate)하는 메소드. 그 result가 _imuCur변수에 새롭게 저장됨.
 
+//*
+//std::cout << "imuCur: " << _imuCur.position << " " << _imuCur.velocity << std::endl;
+//*
   float relSweepTime = toSec(_scanTime - _sweepStart) + relTime;                                  // relative sweep time.
   _imuPositionShift = _imuCur.position - _imuStart.position - _imuStart.velocity * relSweepTime;  // 누적된 IMU 위치와 보간된 IMU 위치의 차이. 즉 얼마만큼 이동되었는지.
 }
 
 
-void BasicScanRegistration::transformToStartIMU(pcl::PointXYZI& point)  // 위 메소드로 생성된 _imuCur와 _imuPositionShift를 이용해 입력한 포인트를 sweep의 시작 지점으로 투영해준다.
+void BasicScanRegistration::transformToStartIMU(pcl::PointXYZRGBNormal& point)  // 위 메소드로 생성된 _imuCur와 _imuPositionShift를 이용해 입력한 포인트를 sweep의 시작 지점으로 투영해준다.
 {
   // rotate point to global IMU system.                                     // _imuCur를 이용해 global system으로 변환.
   rotateZXY(point, _imuCur.roll, _imuCur.pitch, _imuCur.yaw);
@@ -161,7 +166,7 @@ void BasicScanRegistration::extractFeatures(const uint16_t& beginIdx) // 현재�
   size_t nScans = _scanIndices.size();
 
   for (size_t i = beginIdx; i < nScans; i++) {
-    pcl::PointCloud<pcl::PointXYZI>::Ptr surfPointsLessFlatScan(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr surfPointsLessFlatScan(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     size_t scanStartIdx = _scanIndices[i].first;
     size_t scanEndIdx = _scanIndices[i].second;
 
@@ -248,8 +253,8 @@ void BasicScanRegistration::extractFeatures(const uint16_t& beginIdx) // 현재�
     }
 
     // down size less flat surface point cloud of current scan.   // 현 scan의 less flat 특징점들을 down size하여 _surfacePointsFlat을 생성한다.
-    pcl::PointCloud<pcl::PointXYZI> surfPointsLessFlatScanDS;
-    pcl::VoxelGrid<pcl::PointXYZI> downSizeFilter;
+    pcl::PointCloud<pcl::PointXYZRGBNormal> surfPointsLessFlatScanDS;
+    pcl::VoxelGrid<pcl::PointXYZRGBNormal> downSizeFilter;
     downSizeFilter.setInputCloud(surfPointsLessFlatScan);
     downSizeFilter.setLeafSize(_config.lessFlatFilterSize, _config.lessFlatFilterSize, _config.lessFlatFilterSize);
     downSizeFilter.filter(surfPointsLessFlatScanDS);
@@ -335,9 +340,9 @@ void BasicScanRegistration::setScanBuffersFor(const size_t& startIdx, const size
 
   // mark unreliable points as picked
   for (size_t i = startIdx + _config.curvatureRegion; i < endIdx - _config.curvatureRegion; i++) {
-    const pcl::PointXYZI& previousPoint = (_laserCloud[i - 1]);
-    const pcl::PointXYZI& point = (_laserCloud[i]);
-    const pcl::PointXYZI& nextPoint = (_laserCloud[i + 1]);
+    const pcl::PointXYZRGBNormal& previousPoint = (_laserCloud[i - 1]);
+    const pcl::PointXYZRGBNormal& point = (_laserCloud[i]);
+    const pcl::PointXYZRGBNormal& nextPoint = (_laserCloud[i + 1]);
 
     float diffNext = calcSquaredDiff(nextPoint, point);
 
