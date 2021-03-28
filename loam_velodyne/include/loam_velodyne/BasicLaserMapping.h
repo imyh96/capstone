@@ -147,6 +147,13 @@ public:
    ////////////////////////////////////////////////////////////////////
    bool isOverlap(const pcl::PointXYZRGB& point);
 
+   //HD 내부파라미터
+   cv::Mat K;
+   cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
+                                          0, -1, 0, 0.066, //-0.056, -0.026, 0.066
+                                          0,  0, 1, 0.0444); //0.0444
+   cv::Mat KE;
+
    float* depths;
    cv::Mat _mat_left;
    cv::Mat _mat_depth;

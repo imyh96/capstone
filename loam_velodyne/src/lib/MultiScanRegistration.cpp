@@ -348,9 +348,9 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
       xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
       yp = round(xyz_C[1][0]/xyz_C[2][0]);
 
-      if(pixRange <= xp && xp < 1280-pixRange)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+      if(0 <= xp && xp < 1280)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
       {
-        if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
+        if(0 <= yp && yp < 720) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
         {
           Idx = xp + 1280*yp;   // 이미지의 각 픽셀에 해당하는 depth값을 얻기 위한 index.
 

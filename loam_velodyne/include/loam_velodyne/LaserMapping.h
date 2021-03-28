@@ -47,6 +47,7 @@
 ////////////////////////////////////////
 #include <sensor_msgs/Image.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <sensor_msgs/CameraInfo.h>
 ////////////////////////////////////////
 
 namespace loam
@@ -102,6 +103,7 @@ public:
    void zedPoseHandler(const geometry_msgs::PoseStamped::ConstPtr& msg);
    void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
    void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
+   void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
    // ////////////////////////////////////////////////////////////////
 
 
@@ -154,6 +156,8 @@ private:
    ros::Subscriber _subZedTrans;
    ros::Subscriber _subLeftRectified;
    ros::Subscriber _subDepthRectified;
+   ros::Subscriber _subLeftcamInfo;
+   bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
    //////////////////////////////////////////
 };
 

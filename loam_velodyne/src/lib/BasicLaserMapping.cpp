@@ -701,8 +701,6 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
   float depthZ, depthL, xl, yl, zl;
   
-//   int zedepth, lidepth;
-//   float zedepthf, lidepthf;
   std::uint32_t rgb;
 
   double fx_d = K.at<float>(0,0);
@@ -773,11 +771,13 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                   
                }
             }
+            SInd++;
+
          }
       }  
    }
 
-   SInd++;
+   
    ///////////////////////////////////////////////////////
    
 
