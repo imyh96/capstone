@@ -618,9 +618,9 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
     point.y = laserCloudIn[i].z;
     point.z = laserCloudIn[i].x;
 
-    point.normal_x = 0;
-    point.normal_y = 0;
-    point.normal_z = 0;
+    point.normal_x = -1;
+    point.normal_y = -1;
+    point.normal_z = -1;
 
     // skip NaN and INF valued points.     // NaN 이나 INF인 포인트들은 건너뛴다.
     if (!pcl_isfinite(point.x) ||
@@ -680,31 +680,27 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
       {
         if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
         {
-          // std::cout << "Entering makePixelPoint!" << '\n';
-          // calcNorVec(point, scanID);
-          // std::cout << "point의 n_x, n_y, n_z: " << point.normal_x << " " << point.normal_y << " " << point.normal_z <<'\n';
+          // p = _mat_left.ptr<uchar>(yp);
+          // B = p[xp*channels + 0];   // left 이미지에서 컬러값 추출.
+          // G = p[xp*channels + 1];
+          // R = p[xp*channels + 2]; 
 
-          p = _mat_left.ptr<uchar>(yp);
-          B = p[xp*channels + 0];   // left 이미지에서 컬러값 추출.
-          G = p[xp*channels + 1];
-          R = p[xp*channels + 2]; 
+          // xl = point.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
+          // yl = point.y + 0.066;
+          // zl = point.z - 0.0444;
 
-          xl = point.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
-          yl = point.y + 0.066;
-          zl = point.z - 0.0444;
-
-          depthL = sqrt(xl*xl + yl*yl + zl*zl);
+          // depthL = sqrt(xl*xl + yl*yl + zl*zl);
 
           Idx = xp + 1280*yp;   // 이미지의 각 픽셀에 해당하는 depth값을 얻기 위한 index.
 
           if(std::isfinite(depths[Idx])){
 
-            zedepthf = depths[Idx];
-            lidepthf = depthL;// + 0.0444; // depth에 대한 translation
+            // zedepthf = depths[Idx];
+            // lidepthf = depthL;// + 0.0444; // depth에 대한 translation
 
             //std::cout << "scanID: " << scanID << std::endl;
             
-            if(((lidepthf-0.2) < zedepthf) && (zedepthf < (lidepthf+0.2))){
+            // if(((lidepthf-0.2) < zedepthf) && (zedepthf < (lidepthf+0.2))){
 
               // // 만일 동일한 점이 존재하는 경우 다음 point로 넘어간다.
               // if(isOverlap(point))
@@ -713,12 +709,12 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
               // point.y = -((yp - cy_d) * depthL / fy_d);
               // point.z = depthL; //depths[Idx];
 
-              rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
-              point.rgb = *reinterpret_cast<float*>(&rgb);
+              // rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+              // point.rgb = *reinterpret_cast<float*>(&rgb);
 
-              point.normal_x = 1;
-              point.normal_y = 1;
-              point.normal_z = 1;
+              point.normal_x = xp;
+              point.normal_y = yp;
+              point.normal_z = depths[Idx];
 
 
               // //this made by INHYEOK, AVERAGEING FILTER
@@ -787,7 +783,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
               
 
 
-            }
+            // }
 
           }
 
@@ -797,10 +793,10 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
 
     }
 
-    if(point.normal_x == 0 && point.normal_y == 0 && point.normal_z == 0){// && point.normal_y != 1 && point.normal_x != 1){          // 컬러가 없는 포인트들엔 검정을 할당.
-      rgb = (static_cast<std::uint32_t>(0) << 16 | static_cast<std::uint32_t>(0) << 8 | static_cast<std::uint32_t>(0));
-      point.rgb = *reinterpret_cast<float*>(&rgb);
-    }
+    // if(point.normal_x == -1 && point.normal_y == -1 && point.normal_z == -1){// && point.normal_y != 1 && point.normal_x != 1){          // 컬러가 없는 포인트들엔 검정을 할당.
+    //   rgb = (static_cast<std::uint32_t>(0) << 16 | static_cast<std::uint32_t>(0) << 8 | static_cast<std::uint32_t>(0));
+    //   point.rgb = *reinterpret_cast<float*>(&rgb);
+    // }
 
     ///////////////// ///////////////////////////// ////////////////////
     

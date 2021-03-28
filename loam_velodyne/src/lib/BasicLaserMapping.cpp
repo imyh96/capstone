@@ -405,147 +405,6 @@ bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGB& point){
    return false;
 }
 
-// ////////////// 임의의 픽셀 포인트 추가 알고리즘 //////////////
-// void BasicLaserMapping::makePixelPoint(const pcl::PointXYZRGBNormal& point){
-   
-//    float V[3];
-//    float v1[3];
-//    float v2[3];
-//    float sizev1, sizev2;
-
-//    float dist;
-//    float r, maxRadius;
-//    float t;
-//    float inc;
-//    int thresh;
-
-//    int xp, yp, Idx, B, G, R;
-//    float depthL, xl, yl, zl;
-//    uchar* p;
-//    int channels = _mat_left.channels();
-//    cv::Mat_<float> xyz_L(4,1);
-//    cv::Mat_<float> xyz_C(3,1);
-//    std::uint32_t rgb;
-
-//    pcl::PointXYZRGB pixPoint;
-
-
-//    // V에 수직인 벡터 v1을 구한다.
-//    V[0] = point.normal_x;
-//    V[1] = point.normal_y;
-//    V[2] = point.normal_z;
-
-//    if(abs(V[0]) > abs(V[2])){
-//       v1[0] = V[1];
-//       v1[1] = -V[0];
-//       v1[2] = 0.0;
-//    }
-//    else{
-//       v1[0] = 0.0;
-//       v1[1] = V[2];
-//       v1[2] = -V[1];
-//    }
-
-//    // v1과 V에 수직인 벡터 v2를 구한다. (v1 x V) (두 벡터의 외적)
-//    v2[0] = v1[1]*V[2] - v1[2]*V[1];
-//    v2[1] = v1[2]*V[0] - v1[0]*V[2];
-//    v2[2] = v1[0]*V[1] - v1[1]*V[0];
-
-//    // v1, v2 모두 unit vector로 바꾼다.
-//    sizev1 = sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2]);
-//    sizev2 = sqrt(v2[0]*v2[0] + v2[1]*v2[1] + v2[2]*v2[2]);
-
-//    v1[0] /= sizev1;
-//    v1[1] /= sizev1;
-//    v1[2] /= sizev1;
-
-//    v2[0] /= sizev2;
-//    v2[1] /= sizev2;
-//    v2[2] /= sizev2;
-
-//    // 3. 평면 위에 존재하는 중심이 p3이고, 반지름이 r인 원의 원주상에 존재하는 점들의 좌표를 구한다.
-//    dist  = 0.001;
-//    maxRadius = 0.005;
-//    r = dist;
-//    while(r <= maxRadius){
-      
-//       inc = 2 * asin((dist/2)/r);   // asin이 return해 주는 값은 이미 radian 값이므로 따로 바꿔주지 않아도 된다.
-//       t = 0;
-
-//       while(t < 2*M_PI){
-//          // 해당 좌표로 포인트를 생성한다.
-//          pixPoint.x = point.x + (r*cos(t)) * v1[0] + (r*sin(t)) * v2[0];
-//          pixPoint.y = point.y + (r*cos(t)) * v1[1] + (r*sin(t)) * v2[1];
-//          pixPoint.z = point.z + (r*cos(t)) * v1[2] + (r*sin(t)) * v2[2];
-
-//          // skip NaN and INF valued points.     // NaN 이나 INF인 포인트들은 건너뛴다.
-//          if (!pcl_isfinite(pixPoint.x) ||
-//              !pcl_isfinite(pixPoint.y) ||
-//              !pcl_isfinite(pixPoint.z)) {
-//             t += inc;
-//             continue;
-//          }
-//             // skip zero valued points             // 좌표 값이 0인 포인트들은 건너뛴다.
-//          if (pixPoint.x * pixPoint.x + pixPoint.y * pixPoint.y + pixPoint.z * pixPoint.z < 0.0001) {
-//             t += inc;
-//             continue;
-//          }
-
-//          // 이전에 입력했던 점인지 체크한다.
-//          if(isOverlap(pixPoint)){
-//             t += inc;
-//             continue;
-//          }
-
-//          // 색을 입히기 위해 행렬을 이용해 이미지로 투영한다.
-//          xyz_L << pixPoint.x, pixPoint.y, pixPoint.z, 1; // 라이다 좌표.
-//          xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
-
-//          xp = round(xyz_C[0][0]/xyz_C[2][0]);   // 변환한 x, y, z 좌표. s를 나눠주어야 함.
-//          yp = round(xyz_C[1][0]/xyz_C[2][0]);   // 반올림하여 정수 좌표로 만들어준다.
-
-//          if(0 <= xp && xp < 1280)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
-//          {
-//             if(0 <= yp && yp < 720)
-//             {
-//                // 5. depth가 비슷할 경우 색을 입힌다.
-//                p = _mat_left.ptr<uchar>(yp);
-//                B = p[xp*channels + 0];   // left 이미지에서 컬러값 추출.
-//                G = p[xp*channels + 1];
-//                R = p[xp*channels + 2]; 
-
-//                xl = pixPoint.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
-//                yl = pixPoint.y + 0.066;
-//                zl = pixPoint.z - 0.0444;
-
-//                depthL = sqrt(xl*xl + yl*yl + zl*zl);
-
-//                Idx = xp + 1280*yp;
-
-//                if(std::isfinite(depths[Idx])){
-//                   if(((depthL-0.2) < depths[Idx]) && (depths[Idx] < (depthL+0.2))){
-//                      // 점에 rgb값을 할당한다.
-//                      rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
-//                      pixPoint.rgb = *reinterpret_cast<float*>(&rgb);
-
-//                      // 6. 점을 월드 좌표계로 옮긴 후, laserCloud에 입력한다.
-//                      pointAssociateToMap(pixPoint, pixPoint);
-//                      _laserCloudFullResColor.push_back(pixPoint);
-//                      _laserCloudFullResColorStack.push_back(pixPoint);
-//                   }
-//                }
-//             }
-//          }  
-
-//          t += inc;
-//       }
-
-//       r += dist;
-//    }
-
-// } // makePixelPoint() end
-
-
 
 bool BasicLaserMapping::process(Time const& laserOdometryTime)
 {
@@ -869,7 +728,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
   uchar* p;
   int channels = _mat_left.channels();
 
-  float depthL, xl, yl, zl;
+  float depthZ, depthL, xl, yl, zl;
   cv::Mat_<float> xyz_C(3,1);
   cv::Mat_<float> xyz_L(4,1);
   
@@ -891,6 +750,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
   int pixRange = 1; // 1 = 3x3, 2 = 5x5, 3 = 7x7 
 
   pcl::PointXYZRGB pixpoint;
+
+  int ind = 0;
+  float range = 0.2;
   ////////////////////////////////////////
    
    
@@ -900,73 +762,69 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    for (auto& pt : *_laserCloudFullRes){
       
       // 해당 점에 색이 입혀진 경우.
-      if(pt.normal_z == 1 && pt.normal_y == 1 && pt.normal_x == 1){
+      if(pt.normal_z != -1 && pt.normal_y != -1 && pt.normal_x != -1){
 
-         xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
-         xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
+         // xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
+         // xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
 
-         xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
-         yp = round(xyz_C[1][0]/xyz_C[2][0]);
+         // xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
+         // yp = round(xyz_C[1][0]/xyz_C[2][0]);
 
-         if(pixRange <= xp && xp < 1280-pixRange)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
-         //if(321 <= xp && xp < 960)
-         {
-            if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
-            {
+         // if(pixRange <= xp && xp < 1280-pixRange)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+         // //if(321 <= xp && xp < 960)
+         // {
+         //    if(pixRange <= yp && yp < 720-pixRange) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
+         //    {
                xl = pt.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
                yl = pt.y + 0.066;
                zl = pt.z - 0.0444;
 
                depthL = sqrt(xl*xl + yl*yl + zl*zl);
+               depthZ = pt.normal_z;
+               xp = pt.normal_x;
+               yp = pt.normal_y;
 
-               Idx = xp + 1280*yp;
+               // Idx = xp + 1280*yp;
 
-               if(std::isfinite(depths[Idx])){
-                  zedepthf = depths[Idx];
-                  lidepthf = depthL;
+               // if(std::isfinite(depths[Idx])){
+               //    zedepthf = depths[Idx];
+               //    lidepthf = depthL;
 
-
-                  //made by INHYEOK, AVERAGEING FILTER
-                  float zed_dep_sum = 0;
-                  float zed_dep_avg = 0;
-                  int array_num = 0;
-                  for(int x =  xp-pixRange; x < xp+pixRange; x++){
-                     for(int y = yp-pixRange; y < yp+pixRange; y++){
-                        int i = x + 1280 * y;
-                        zed_dep_sum += depths[i];
-                        array_num ++;
-                     }
-                  }
-                  zed_dep_avg = (zed_dep_sum / array_num);
-                  if(((lidepthf-0.15) < zed_dep_avg) && (zed_dep_avg < (lidepthf+0.15)))
+                  if(((depthL-range) < depthZ) && (depthZ < (depthL+range)))
                   {
                   // //if(((lidepthf-0.2) < zedepthf) && (zedepthf < (lidepthf+0.2))){
                   //    // //original
                      for(int x = xp-pixRange; x < xp+pixRange; x++){
                        for(int y = yp-pixRange; y < yp+pixRange; y++){
 
-                           pixpoint.x = -((x - cx_d) * depthL / fx_d);
-                           pixpoint.y = -((y - cy_d) * depthL / fy_d);
-                           pixpoint.z = depthL;
+                           ind = x + 1280 * y;
 
-                           p = _mat_left.ptr<uchar>(y);
-                           B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
-                           G = p[x*channels + 1];
-                           R = p[x*channels + 2]; 
+                           if(((depthL-range) < depths[ind]) && (depths[ind] < (depthL+range)))
+                           {
+                              pixpoint.x = -((x - cx_d) * depthL / fx_d);
+                              pixpoint.y = -((y - cy_d) * depthL / fy_d);
+                              pixpoint.z = depthL;
 
-                           rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
-                           pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
+                              p = _mat_left.ptr<uchar>(y);
+                              B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
+                              G = p[x*channels + 1];
+                              R = p[x*channels + 2]; 
 
-                           pointAssociateToMap(pixpoint, pointRGB);
+                              rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+                              pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
 
-                           if(!isOverlap(pointRGB)){
-                              _laserCloudFullResColor.push_back(pointRGB);
-                              
-                              if(SInd > PCNUM-1)
-                                 SInd = 0;
-                              _laserCloudFullResArray[SInd]->push_back(pointRGB);
-                              
+                              pointAssociateToMap(pixpoint, pointRGB);
+
+                              if(!isOverlap(pointRGB)){
+                                 _laserCloudFullResColor.push_back(pointRGB);
+                                 
+                                 if(SInd > PCNUM-1)
+                                    SInd = 0;
+                                 _laserCloudFullResArray[SInd]->push_back(pointRGB);
+                                 
+                              }
                            }
+                           
                         }
                      }
 
@@ -978,9 +836,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                      //    _laserCloudFullResColorStack.push_back(pointRGB);
                      
                   }
-               }
-            }
-         }  
+               // }
+         //    }
+         // }  
       }  
    }
    ///////////////////////////////////////////////////////

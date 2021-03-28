@@ -51,7 +51,7 @@
 #include <string>
 #include <cv_bridge/cv_bridge.h>
 
-#define PCNUM 120000 // number of _laserCloudFullResColorStack point clouds
+#define PCNUM 4800000 // number of _laserCloudFullResColorStack point clouds
 
 using namespace cv;
 
