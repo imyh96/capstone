@@ -370,7 +370,7 @@ void LaserMapping::spin()
    {
       *_laserCloudSurround += *_laserCloudFullResArray[i];
    }
-   pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans91.ply", *_laserCloudSurround);
+   pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans102.ply", *_laserCloudSurround);
    
 }
 

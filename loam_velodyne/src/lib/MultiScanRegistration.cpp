@@ -36,6 +36,11 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 
+#define ZEDRESOLW 2208 // HD2K: 2208 , HD1080: 1920
+#define ZEDRESOLH 1242 // HD2K: 1242 , HD1080: 1080
+
+
+
 namespace loam {
 
 MultiScanMapper::MultiScanMapper(const float& lowerBound,
@@ -59,16 +64,9 @@ void MultiScanMapper::set(const float &lowerBound,
   _factor = (nScanRings - 1) / (upperBound - lowerBound);
 }
 
-
-
 int MultiScanMapper::getRingForAngle(const float& angle) {
   return int(((angle * 180 / M_PI) - _lowerBound) * _factor + 0.5);
 }
-
-
-
-
-
 
 MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper)
     : _scanMapper(scanMapper)
@@ -131,11 +129,6 @@ bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& pri
     }
   }
   
-  // receiving zed2's right & left image topic
-  //_subRightRectified = node.subscribe("/zed2/zed_node/right/image_rect_color", 10, &MultiScanRegistration::imageRightRectifiedHandler, this);
-  // _subLeftRectified  = node.subscribe("/zed2/zed_node/left/image_rect_color", 10, &MultiScanRegistration::imageLeftRectifiedHandler, this);
-  //_subLeftRectified  = node.subscribe("/zed2/zed_node/left_raw/image_raw_color", 10, &MultiScanRegistration::imageLeftRectifiedHandler, this);
-
   // receiving zed2's camera calibration data topic
   if(!_newLeftcamInfo)
     _subLeftcamInfo = node.subscribe("/zed2/zed_node/left/camera_info", 10, &MultiScanRegistration::leftcamInfoHandler, this);
@@ -152,39 +145,6 @@ bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& pri
 
   return true;
 }
-
-// /////////////////////////////////////////////////////
-// void MultiScanRegistration::imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg) {
-//     // ROS_INFO("Left Rectified image received from ZED - Size: %dx%d",
-//     //          msg->width, msg->height);
-
-//     cv_bridge::CvImageConstPtr cv_ptr;
-//     try{
-//       cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-//     }
-//     catch (cv_bridge::Exception& e){
-//       ROS_ERROR("cv_bridge exception: %s", e.what());
-//     return;
-//     }
-
-//     _mat_left = cv_ptr->image;
-// }
-
-// void MultiScanRegistration::imageRightRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg) {
-//     // ROS_INFO("Right Rectified image received from ZED - Size: %dx%d",
-//     //          msg->width, msg->height);
-    
-//     cv_bridge::CvImageConstPtr cv_ptr;
-//     try{
-//       cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-//     }
-//     catch (cv_bridge::Exception& e){
-//       ROS_ERROR("cv_bridge exception: %s", e.what());
-//     return;
-//     }
-
-//     _mat_right = cv_ptr->image;
-// }
 
 void MultiScanRegistration::depthHandler(const sensor_msgs::Image::ConstPtr& msg) {
 
@@ -348,11 +308,11 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
       xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
       yp = round(xyz_C[1][0]/xyz_C[2][0]);
 
-      if(0 <= xp && xp < 1280)  // 1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+      if(0 <= xp && xp < ZEDRESOLW)  // 2208*1242 /1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
       {
-        if(0 <= yp && yp < 720) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
+        if(0 <= yp && yp < ZEDRESOLH) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
         {
-          Idx = xp + 1280*yp;   // 이미지의 각 픽셀에 해당하는 depth값을 얻기 위한 index.
+          Idx = xp + ZEDRESOLW*yp;   // 이미지의 각 픽셀에 해당하는 depth값을 얻기 위한 index.
 
           if(std::isfinite(depths[Idx])){
               point.normal_x = xp;

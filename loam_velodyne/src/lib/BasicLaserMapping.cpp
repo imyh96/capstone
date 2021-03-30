@@ -41,7 +41,9 @@
 #define lidarRT 0
 #define camRT 1
 
-int cnt = 0;
+#define PIXRANGE 1 // 1 = 3x3, 2 = 5x5, 3 = 7x7 
+#define DEPTHRANGE 0.2
+#define ZEDRESOL 2208 // HD2K: 2208 , HD1080: 1920
 
 
 namespace loam
@@ -379,12 +381,8 @@ bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGB& point){
    iter = overlapCheck.find(tmpString);
 
    // 4. 만일 존재하는 경우 continue
-   if(iter != overlapCheck.end()){
-      //cnt++;
-      //cout << "cnt: " << cnt << '\n';
+   if(iter != overlapCheck.end())
       return true;
-   }
-      
 
    // 5. 존재하지 않는경우 set에 추가.
    overlapCheck.insert(tmpString);
@@ -708,12 +706,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
   double cx_d = K.at<float>(0,2);
   double cy_d = K.at<float>(1,2);
 
-  int pixRange = 1; // 1 = 3x3, 2 = 5x5, 3 = 7x7 
-
   pcl::PointXYZRGB pixpoint;
 
   int ind = 0;
-  float range = 0.2;
   ////////////////////////////////////////
    
    
@@ -734,14 +729,14 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
          xp = pt.normal_x;
          yp = pt.normal_y;
 
-         if(((depthL-range) < depthZ) && (depthZ < (depthL+range)))
+         if(((depthL-DEPTHRANGE) < depthZ) && (depthZ < (depthL+DEPTHRANGE)))
          {
-            for(int x = xp-pixRange; x < xp+pixRange; x++){
-               for(int y = yp-pixRange; y < yp+pixRange; y++){
+            for(int x = xp-PIXRANGE; x <= xp+PIXRANGE; x++){
+               for(int y = yp-PIXRANGE; y <= yp+PIXRANGE; y++){
 
-                  ind = x + 1280 * y;
+                  ind = x + ZEDRESOL * y;
 
-                  if(((depthL-range) < depths[ind]) && (depths[ind] < (depthL+range)))
+                  if(((depthL-DEPTHRANGE) < depths[ind]) && (depths[ind] < (depthL+DEPTHRANGE)))
                   {
                      pixpoint.x = -((x - cx_d) * depthL / fx_d);
                      pixpoint.y = -((y - cy_d) * depthL / fy_d);
@@ -763,15 +758,14 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                         
                         if(SInd > PCNUM-1)
                            SInd = 0;
-                        _laserCloudFullResArray[SInd]->push_back(pointRGB);
 
+                        _laserCloudFullResArray[SInd]->push_back(pointRGB);
+                        SInd++;
                      }   
-                     
+            
                   }
-                  
                }
             }
-            SInd++;
 
          }
       }  
