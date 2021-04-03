@@ -153,7 +153,7 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
    }
 
    // advertise laser mapping topics. // 다른 node로 보낼 topic들 3가지를 advertise.
-   _pubLaserCloudSurround = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 1);      // 월드 좌표계에 축적된 포인트 클라우드
+   _pubLaserCloudMap = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 1);      // 월드 좌표계에 축적된 포인트 클라우드
    _pubLaserCloudFullRes  = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_registered", 2); // 라이다 좌표계의 현재 sweep의 포인트 클라우드
    _pubOdomAftMapped      = node.advertise<nav_msgs::Odometry>("/aft_mapped_to_init", 5);              // mapping된 이후의 odometry.
 
@@ -338,10 +338,10 @@ void LaserMapping::spin()
    viewer->initCameraParameters ();
    
    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(laserCloudSurround());
-   // pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(laserCloudSurroundColor());
-   /////////////////////////////////////////
    
-   int cnt = 0;
+   int cnt = 0;   // counts number of point clouds drawn on viewer.
+   /////////////////////////////////////////
+
    while (status)
    {
       ros::spinOnce();
@@ -364,14 +364,6 @@ void LaserMapping::spin()
       status = ros::ok();
       rate.sleep();
    }
-
-   // 종료시 축적한 포인트 클라우드를 저장한다.
-   for (int i = 0; i < PCNUM; i++)
-   {
-      *_laserCloudSurround += *_laserCloudFullResArray[i];
-   }
-   pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans102.ply", *_laserCloudSurround);
-   
 }
 
 void LaserMapping::reset()
@@ -406,11 +398,14 @@ void LaserMapping::process()
 
 void LaserMapping::publishResult()
 {
-   // // publish new map cloud according to the input output ratio.     // 입력, 출력비에 따라 새로운 map cloud를 publish.
-   // if (hasFreshMap()){ // publish new map cloud.                      // map cloud가 새롭게 업데이트 되었다면 publish 한다.
-   //    publishCloudMsg(_pubLaserCloudSurround, laserCloudSurround(), _timeLaserOdometry, "/camera_init");
-   // }
-   // 위의 laserCloudSurround 는 RVIZ로 publish하지 않고 PCL_Visualizer로 확인한다. (용량이 너무 크기 때문)
+   // publish new map cloud according to the input output ratio.     // 입력, 출력비에 따라 새로운 map cloud를 publish.
+   // # laserCloudSurround 는 RVIZ로 publish하지 않고 PCL_Visualizer로 확인한다. (용량이 너무 크기 때문)
+
+   if (_newLaserCloudMap)){ // publish new map cloud to transform maintenance node.                      // map cloud가 새롭게 업데이트 되었다면 publish 한다.
+      publishCloudMsg(_pubLaserCloudMap, laserCloudMap(), _timeLaserOdometry, "/camera_init");
+      _newLaserCloudMap = false;
+   }
+   
 
    // publish transformed full resolution input cloud.               // 변환된 full resolution 포인트 클라우드를 publish.
    publishCloudMsg(_pubLaserCloudFullRes, laserCloud(), _timeLaserOdometry, "/camera_init");

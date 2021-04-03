@@ -60,34 +60,6 @@ namespace loam
     auto deltaRAbort()   const { return _deltaRAbort;   }
 
 
-    // auto & pixelCloud            () { return _pixelCloud          ; }
-    // cv::Mat _mat_left;
-    // cv::Mat _mat_right;
-    // cv::Mat _mat_depth;
-
-    // // 라이다 depth이미지 띄우기
-    // //cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_8UC3);
-    // // cv::Mat _mat_lidar_depth = cv::Mat::zeros(720, 1280, CV_32FC1);
-
-    // //HD 내부파라미터
-    // cv::Mat K;
-    // //  = (cv::Mat_<float>(3,3) <<  528.82, 0, 639.07,
-    // //                                       0, 528.49, 353.9245,
-    // //                                       0, 0, 1);
-
-    // // cv::Mat K = (cv::Mat_<float>(3,3) <<  0.52882, 0, 639.07, 
-    // //                                       0, 0.52849, 353.9245,
-    // //                                       0, 0, 1);
-    
-    // cv::Mat E = (cv::Mat_<float>(3,4) <<  -1,  0, 0, 0.165, //0.06 ,0.15, 0.165
-    //                                        0, -1, 0, 0.066, //-0.056, -0.026, 0.066
-    //                                        0,  0, 1, 0.0444); //0.0444
-    // cv::Mat KE;
-    // cv::Mat pseu_inv_KE;
-
-    // float* depths;
-
-
     /** \brief Transform the given point cloud to the end of the sweep. // 주어진 포인트 클라우드를 sweep의 끝 지점으로 변환(transform)해 주는 메소드.
      *  
      * @param cloud the point cloud to transform.                       // 변환할 포인트 클라우드.
@@ -113,8 +85,6 @@ namespace loam
                             Angle lx, Angle ly, Angle lz,
                             Angle &ox, Angle &oy, Angle &oz);
     
-    // bool isOverlap(const pcl::PointXYZRGB& point);
-    // void makePixelPoint(const pcl::PointXYZRGB& point, int scanID);
 
   private:
     float _scanPeriod;       ///< time per scan.                // 스캔 주기
@@ -160,14 +130,6 @@ namespace loam
     Vector3 _imuShiftFromStart;                           // 시작과 종료 사이의 위치 변화.
     Vector3 _imuVeloFromStart;                            // 시작과 종료 사이의 속도 변화.
 
-    // /////////////////////////////////////////////////////////////////
-    // std::set<std::string> overlapCheck;
-    // std::set<std::string>::iterator iter;
-    // //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
-    // std::queue<pcl::PointXYZRGB> prevPointAt[16];
-
-    // pcl::PointCloud<pcl::PointXYZRGB> _pixelCloud;
-    // /////////////////////////////////////////////////////////////////
   };
 
 } // end namespace loam

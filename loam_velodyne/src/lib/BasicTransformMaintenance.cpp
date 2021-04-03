@@ -177,5 +177,17 @@ void BasicTransformMaintenance::transformAssociateToMap()
       - (-sin(_transformMapped[1]) * x2 + cos(_transformMapped[1]) * z2);
 }
 
+void BasicTransformMaintenance::process()
+{
+   // 점들 나눠서 저장하기.
+   for (auto& pt : *_laserCloudMap){
+      if(SInd > PCNUM-1)
+         SInd = 0;
+
+      _laserCloudMapArray[SInd]->push_back(pt);
+      SInd++;
+   }
+}
+
 
 } // end namespace loam

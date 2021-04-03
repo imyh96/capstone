@@ -72,6 +72,11 @@ public:
    */
   void odomAftMappedHandler(const nav_msgs::Odometry::ConstPtr& odomAftMapped);
 
+  ////////////////////////////////////////
+  void laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMap);
+  void spin();
+  void process();
+  ////////////////////////////////////////
 
 private:
   nav_msgs::Odometry _laserOdometry2;         ///< latest integrated laser odometry message.        가장 최근에 통합된 레이저 오도메트리 메세지.
@@ -82,6 +87,11 @@ private:
 
   ros::Subscriber _subLaserOdometry;    ///< (high frequency) laser odometry subscriber.  레이저 오도메트리의 subscriber.
   ros::Subscriber _subOdomAftMapped;    ///< (low frequency) mapping odometry subscriber. 매핑 오도메트리의 subscriber.
+
+  ////////////////////////////////////////
+  ros::Subscriber _subLaserCloudMap; 
+  bool _newLaserCloudMap;
+  ////////////////////////////////////////
 };
 
 } // end namespace loam

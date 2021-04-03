@@ -38,8 +38,8 @@
 #include <Eigen/QR>
 
 
-#define lidarRT 0
-#define camRT 1
+// #define lidarRT 0
+#define RT_TYPE 1 // 0: use lidar RT, 1: use camera RT
 
 #define PIXRANGE 1 // 1 = 3x3, 2 = 5x5, 3 = 7x7 
 #define DEPTHRANGE 0.2
@@ -344,9 +344,17 @@ bool BasicLaserMapping::createDownsizedMap()
 
    // accumulate map cloud.      // map cloud를 축적한다.
    _laserCloudSurround->clear();
-   *_laserCloudSurround += _laserCloudFullResColor;
+   *_laserCloudSurround += _laserCloudToViewer;
 
    newPointCloud = true;
+
+   if(_newLaserCloudMap){
+      for (int i = 0; i < PCNUM; i++)
+      {
+         *_laserCloudMap += *_laserCloudMapArray[i];
+         _laserCloudMapArray[i]->clear();
+      }
+   }
 
    // // down size map cloud.    // map cloud를 다운 사이즈한다.
    // _laserCloudSurroundDS->clear();
@@ -409,17 +417,14 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    pcl::PointXYZRGB pointRGB;    // PointXYZRGBNormal -> PointXYZRGB 타입으로 바꿔주기 위한 포인트 변수.
    ///////////////////////////
 
-
-   // // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
-   //                                     // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
-#if lidarRT   
-   transformAssociateToMap();
-#endif
-
-#if camRT
+#if RT_TYPE
    /////////////////////////////////////////////////////
    changetoZedRT(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
    /////////////////////////////////////////////////////
+#else
+   // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
+   //                                     // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
+   transformAssociateToMap();
 #endif
    
 
@@ -684,7 +689,8 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    _laserCloudCornerStack->clear();
    _laserCloudSurfStack->clear();
 
-#if lidarRT 
+#if RT_TYPE
+#else  
    // run pose optimization.        // 포즈 최적화를 시행한다.
    optimizeTransformTobeMapped();   // Odometry 알고리즘과 같이, 3차원 KD tree를 이용해 d 를 최소화 하는 변환행렬(_transformTobeMapped)을 구한다.
    /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -714,7 +720,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    
    ///////////////////////////////////////////////////////
    // full res pc의 포인트들 중, 컬러가 입혀진 포인트들만 world좌표계로 변환, 포인트 타입 변환 후, _laserCloudFullResColorStack에 축적한다. 
-   _laserCloudFullResColor.clear();
+   _laserCloudToViewer.clear();
    for (auto& pt : *_laserCloudFullRes){
       
       // 해당 점에 색이 입혀진 경우.
@@ -754,12 +760,14 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
                         pointAssociateToMap(pixpoint, pointRGB);
                         
-                        _laserCloudFullResColor.push_back(pointRGB);
+                        _laserCloudToViewer.push_back(pointRGB);
                         
-                        if(SInd > PCNUM-1)
+                        if(SInd > PCNUM-1){
                            SInd = 0;
-
-                        _laserCloudFullResArray[SInd]->push_back(pointRGB);
+                           toZeroCnt++;
+                        }
+                           
+                        _laserCloudMapArray[SInd]->push_back(pointRGB);
                         SInd++;
                      }   
             
@@ -771,7 +779,11 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
       }  
    }
 
-   
+   // point가 일정 개수 이상 쌓이면 transform maintenance node로 publish.
+   if(toZeroCnt > 10){
+      _newLaserCloudMap = true;
+      toZeroCnt = 0;
+   }
    ///////////////////////////////////////////////////////
    
 

@@ -13,7 +13,7 @@ int main(int argc, char **argv)
 
   if (transMaintenance.setup(node, privateNode)) {
     // initialization successful
-    ros::spin();
+    transMaintenance.spin();
   }
 
   return 0;

@@ -51,14 +51,65 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
    // advertise integrated laser odometry topic.      // 축적한 laser 주행궤적 토픽을 advertise한다.
    _pubLaserOdometry2 = node.advertise<nav_msgs::Odometry>("/integrated_to_init", 5);
 
-   // subscribe to laser odometry and mapping odometry topics.    // laser odometry 와 mapping odometry 토픽들을 subscribe하고, 각각의 핸들러 메소드로 보낸다.
+   // subscribe to laser odometry and mapping odometry topics.
+   // laser odometry 와 mapping odometry 토픽들을 subscribe하고, 각각의 핸들러 메소드로 보낸다.
    _subLaserOdometry = node.subscribe<nav_msgs::Odometry>
       ("/laser_odom_to_init", 5, &TransformMaintenance::laserOdometryHandler, this);
 
    _subOdomAftMapped = node.subscribe<nav_msgs::Odometry>
       ("/aft_mapped_to_init", 5, &TransformMaintenance::odomAftMappedHandler, this);
+   
+   _subLaserCloudMap = node.subscribe<sensor_msgs::PointCloud2>
+      ("/velodyne_cloud_3", 2, &TransformMaintenance::laserCloudMapHandler, this);
 
    return true;
+}
+
+void TransformMaintenance::laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMap)
+{
+   // _timeLaserCloudFullRes = laserCloudFullResMsg->header.stamp;   // 위와 동일하게 처리
+   laserCloudMap().clear();
+   pcl::fromROSMsg(*laserCloudMap, laserCloudMap());
+   _newLaserCloudMap = true;
+}
+
+void TransformMaintenance::spin()
+{
+   ros::Rate rate(100);        /// 회전 비율
+   bool status = ros::ok();    // ros 상태 체크 
+
+   // loop until shutdown
+   while (status)
+   {
+   ros::spinOnce();
+   
+   // try processing new data
+   process();   
+
+   status = ros::ok();
+   rate.sleep();
+   }
+
+   /////////// Save Point cloud ////////////
+   // 종료시 축적한 포인트 클라우드를 저장한다.
+   for (int i = 0; i < PCNUM; i++)
+   {
+      *_laserCloudSurround += *_laserCloudMapArray[i];
+   }
+   pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans103_from_transMainte.ply", *_laserCloudSurround);
+   /////////////////////////////////////////
+}
+
+void TransformMaintenance::process()
+{
+   if (!_newLaserCloudMap) // 새로운 데이타가 도착할때까지 기다림 / waiting for new data to arrive...
+      return;
+
+   _newLaserCloudMap = false;   // reset flags, etc.
+
+   // 점들 나눠서 저장하기.
+   BasicTransformMaintenance::process();
+   
 }
 
 

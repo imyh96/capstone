@@ -140,7 +140,7 @@ private:
    nav_msgs::Odometry _odomAftMapped;      ///< 매핑 odometry 메시지 / mapping odometry message
    tf::StampedTransform _aftMappedTrans;   ///< 매핑 odometry 변환 / mapping odometry transformation
 
-   ros::Publisher _pubLaserCloudSurround;    ///< map cloud 메시지 송신기 / map cloud message publisher
+   ros::Publisher _pubLaserCloudMap;    ///< map cloud 메시지 송신기 / map cloud message publisher
 
    ros::Publisher _pubLaserCloudFullRes;     ///< 현재 full resolution cloud 메시지 송신기 / current full resolution cloud message publisher
    ros::Publisher _pubOdomAftMapped;         ///< 매핑 odometry 송신기 / mapping odometry publisher

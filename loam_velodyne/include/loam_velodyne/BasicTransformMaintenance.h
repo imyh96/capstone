@@ -33,6 +33,8 @@
 
 #include "Twist.h"
 
+#define PCNUM 100000 // number of _laserCloudFullResColorStack point clouds
+
 namespace loam
 {
 
@@ -55,7 +57,14 @@ public:
 
    void transformAssociateToMap();  
 
-
+   /////////////////////////////////////////////////
+   auto& laserCloudMap() { return *_laserCloudMap; }
+   void process();
+   std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudMapArray;
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
+   /////////////////////////////////////////////////
+   
+   
    // result accessor
    auto const& transformMapped() const { return _transformMapped; } // 결과(result) 접근용 get 메소드.
 
@@ -65,6 +74,11 @@ private:
    float _transformMapped[6]{};
    float _transformBefMapped[6]{};
    float _transformAftMapped[6]{};
+
+   /////////////////////////////////////////////////
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudMap;
+   int SInd = 0;
+   /////////////////////////////////////////////////
 };
 
 } // end namespace loam
