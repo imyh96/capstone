@@ -164,9 +164,11 @@ namespace loam
     _subImuTrans = node.subscribe<sensor_msgs::PointCloud2>  // IMU로 부터의 transformation (변환행렬).
       ("/imu_trans", 5, &LaserOdometry::imuTransHandler, this);
 
+
     return true;
   }
   //setup 끝
+
 
   void LaserOdometry::reset() // 리셋
   {
@@ -176,10 +178,14 @@ namespace loam
     _newSurfPointsLessFlat = false;
     _newLaserCloudFullRes = false;
     _newImuTrans = false;
+
+
+
   }
 
 
   //////////////  Handler 함수는 오류를 잡아주는 과정으로 모두 같은 과정///////////////
+
   void LaserOdometry::laserCloudSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg)  // subscribe해 온 메세지.
   {
     _timeCornerPointsSharp = cornerPointsSharpMsg->header.stamp; // subscribe해 온 포인트 클라우드에 저장되어 있던 스캔된 시간을 저장.
@@ -195,6 +201,7 @@ namespace loam
     pcl::removeNaNFromPointCloud(*cornerPointsSharp(), *cornerPointsSharp(), indices);  // 포인트 클라우드로 부터 NaN값을 가지는 포인트들은 제거해 준다.
                                                                                         // NaN : not a number => 컴퓨터가 표시하지 못하는 숫자들
                                                                                         // 0/0 , 문자가 들어간 데이터, 허수등 
+  
 
     _newCornerPointsSharp = true; // 새로운 데이터가 입력 되었음을 나타내는 flag를 ON.
   }

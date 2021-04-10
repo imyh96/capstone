@@ -33,7 +33,17 @@
 
 #include "Twist.h"
 
-#define PCNUM 100000 // number of _laserCloudFullResColorStack point clouds
+////////////////////////////////////
+#include <pcl/io/ply_io.h>
+#include <ros/ros.h>
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
+////////////////////////////////////
+
+#define PCNUM 2000000 // number of _laserCloudFullResColorStack point clouds
+#define PLYFILENAME "/home/cgvlab/ply_test2/output_zedTrans134_thread_OV200.ply"
 
 namespace loam
 {
@@ -44,6 +54,7 @@ namespace loam
 class BasicTransformMaintenance
 {
 public:
+   explicit BasicTransformMaintenance();
 
    void updateOdometry(double pitch, double yaw, double roll, double x, double y, double z);    // Odometry 업데이트용 메소드.
 
@@ -58,10 +69,13 @@ public:
    void transformAssociateToMap();  
 
    /////////////////////////////////////////////////
-   auto& laserCloudMap() { return *_laserCloudMap; }
-   void process();
-   std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudMapArray;
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudMap;
    pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
+   std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudMapArray;
+
+   bool _newLaserCloudMap = false;
+   // bool _turnOffSignal = false;
+   int SInd = 0;
    /////////////////////////////////////////////////
    
    
@@ -74,11 +88,6 @@ private:
    float _transformMapped[6]{};
    float _transformBefMapped[6]{};
    float _transformAftMapped[6]{};
-
-   /////////////////////////////////////////////////
-   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudMap;
-   int SInd = 0;
-   /////////////////////////////////////////////////
 };
 
 } // end namespace loam

@@ -32,6 +32,7 @@
 
 #include "loam_velodyne/TransformMaintenance.h"
 
+
 namespace loam
 {
 
@@ -43,6 +44,8 @@ TransformMaintenance::TransformMaintenance()
 
    _laserOdometryTrans2.frame_id_ = "/camera_init";
    _laserOdometryTrans2.child_frame_id_ = "/camera";
+
+   
 }
 
 
@@ -58,57 +61,53 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
 
    _subOdomAftMapped = node.subscribe<nav_msgs::Odometry>
       ("/aft_mapped_to_init", 5, &TransformMaintenance::odomAftMappedHandler, this);
+
    
-   _subLaserCloudMap = node.subscribe<sensor_msgs::PointCloud2>
-      ("/velodyne_cloud_3", 2, &TransformMaintenance::laserCloudMapHandler, this);
+   _subLaserCloud = node.subscribe<sensor_msgs::PointCloud2>
+      ("/laser_cloud_surround", 1, &TransformMaintenance::laserCloudMapHandler, this);
 
    return true;
 }
 
-void TransformMaintenance::laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMap)
+void TransformMaintenance::laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloud)
 {
-   // _timeLaserCloudFullRes = laserCloudFullResMsg->header.stamp;   // 위와 동일하게 처리
-   laserCloudMap().clear();
-   pcl::fromROSMsg(*laserCloudMap, laserCloudMap());
+   _laserCloudMap->clear();
+   pcl::fromROSMsg(*laserCloud, *_laserCloudMap);
+
    _newLaserCloudMap = true;
+   // printf("_newLaserCloudMap: %d\n", _newLaserCloudMap);
 }
 
 void TransformMaintenance::spin()
 {
+   // thread 시작
+   thread t1(&TransformMaintenance::process, this);
+
    ros::Rate rate(100);        /// 회전 비율
    bool status = ros::ok();    // ros 상태 체크 
 
    // loop until shutdown
    while (status)
    {
-   ros::spinOnce();
-   
-   // try processing new data
-   process();   
+      ros::spinOnce();
+      
+      // // try processing new data
+      // process();   
 
-   status = ros::ok();
-   rate.sleep();
+      status = ros::ok();
+      rate.sleep();
    }
 
-   /////////// Save Point cloud ////////////
+   // thread 합치기
+   t1.join();
+  
+   /////////// Save Point cloud ///////////
    // 종료시 축적한 포인트 클라우드를 저장한다.
-   for (int i = 0; i < PCNUM; i++)
-   {
-      *_laserCloudSurround += *_laserCloudMapArray[i];
-   }
-   pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans103_from_transMainte.ply", *_laserCloudSurround);
+   for(int j = 0; j < PCNUM; j++)
+      *_laserCloudSurround += *_laserCloudMapArray[j];
+   
+   pcl::io::savePLYFileBinary(PLYFILENAME, *_laserCloudSurround);
    /////////////////////////////////////////
-}
-
-void TransformMaintenance::process()
-{
-   if (!_newLaserCloudMap) // 새로운 데이타가 도착할때까지 기다림 / waiting for new data to arrive...
-      return;
-
-   _newLaserCloudMap = false;   // reset flags, etc.
-
-   // 점들 나눠서 저장하기.
-   BasicTransformMaintenance::process();
    
 }
 
@@ -163,6 +162,34 @@ void TransformMaintenance::odomAftMappedHandler(const nav_msgs::Odometry::ConstP
       odomAftMapped->twist.twist.linear.x,
       odomAftMapped->twist.twist.linear.y,
       odomAftMapped->twist.twist.linear.z);
+}
+
+void TransformMaintenance::process() // const pcl::PointCloud<pcl::PointXYZRGB>& laserCloudIn
+{
+   // ros::Rate prate(100);        /// 회전 비율
+   bool pstatus = ros::ok();    // ros 상태 체크 
+
+   while (pstatus)
+   {
+      // ros::spinOnce();
+      
+      if (_newLaserCloudMap){
+
+         for(auto& pt : *_laserCloudMap){
+            if(SInd > PCNUM-1)
+               SInd = 0;
+
+            _laserCloudMapArray[SInd]->push_back(pt);
+            SInd++;
+         }
+
+         _newLaserCloudMap = false;   // reset flags, etc.
+      }
+
+      pstatus = ros::ok();
+      // prate.sleep();
+   }
+   
 }
 
 } // end namespace loam

@@ -231,7 +231,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.009999999776482582
       Style: Points
-      Topic: /velodyne_cloud_registered
+      Topic: /laser_cloud_surround
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -333,10 +333,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -1.149796962738037
+      Pitch: -1.2697968482971191
       Target Frame: aft_mapped
       Value: ThirdPersonFollower (rviz)
-      Yaw: 1.275396704673767
+      Yaw: 1.5153964757919312
     Saved: ~
 Window Geometry:
   Displays:

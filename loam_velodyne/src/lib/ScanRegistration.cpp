@@ -145,7 +145,7 @@ bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateN
     return false;
 
   // subscribe to IMU topic
-  _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
+  // _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
   //_subImu = node.subscribe<sensor_msgs::Imu>("/zed2/zed_node/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
   // advertise scan registration topics

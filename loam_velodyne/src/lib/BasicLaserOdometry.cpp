@@ -217,6 +217,7 @@ void BasicLaserOdometry::process()
       return;
    }
 
+
    pcl::PointXYZRGBNormal coeff;
    bool isDegenerate = false;
    Eigen::Matrix<float, 6, 6> matP;

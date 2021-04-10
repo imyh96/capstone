@@ -153,7 +153,7 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
    }
 
    // advertise laser mapping topics. // 다른 node로 보낼 topic들 3가지를 advertise.
-   _pubLaserCloudMap = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 1);      // 월드 좌표계에 축적된 포인트 클라우드
+   _pubLaserCloudSurround = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 1);      // 월드 좌표계에 축적된 포인트 클라우드
    _pubLaserCloudFullRes  = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_registered", 2); // 라이다 좌표계의 현재 sweep의 포인트 클라우드
    _pubOdomAftMapped      = node.advertise<nav_msgs::Odometry>("/aft_mapped_to_init", 5);              // mapping된 이후의 odometry.
 
@@ -172,9 +172,9 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
    _subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>
       ("/velodyne_cloud_3", 2, &LaserMapping::laserCloudFullResHandler, this);
 
-   // subscribe to IMU topic. // Multi Scan registration 노드에서 IMU 토픽을 subscribe.
-   _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &LaserMapping::imuHandler, this);
-   //_subImu = node.subscribe<sensor_msgs::Imu>("/zed2/zed_node/imu/data", 50, &LaserMapping::imuHandler, this);
+   // // subscribe to IMU topic. // Multi Scan registration 노드에서 IMU 토픽을 subscribe.
+   // _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &LaserMapping::imuHandler, this);
+   // //_subImu = node.subscribe<sensor_msgs::Imu>("/zed2/zed_node/imu/data", 50, &LaserMapping::imuHandler, this);
 
    /////////////////////////////////////////////
    _subZedTrans = node.subscribe<geometry_msgs::PoseStamped>("/zed2/zed_node/pose", 10, &LaserMapping::zedPoseHandler, this);   // zed2로 부터 월드 좌표계에서의 센서 위치 받아오기.
@@ -191,36 +191,40 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 }
 
 void LaserMapping::imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg) {
-    // ROS_INFO("Left Rectified image received from ZED - Size: %dx%d",
-    //          msg->width, msg->height);
+   // ROS_INFO("Left Rectified image received from ZED - Size: %dx%d",
+   //          msg->width, msg->height);
 
-    cv_bridge::CvImageConstPtr cv_ptr;
-    try{
-      cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-    }
-    catch (cv_bridge::Exception& e){
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-    }
+   cv_bridge::CvImageConstPtr cv_ptr;
+   try{
+   cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+   }
+   catch (cv_bridge::Exception& e){
+   ROS_ERROR("cv_bridge exception: %s", e.what());
+   return;
+   }
 
-    _mat_left = cv_ptr->image;
+   _mat_left = cv_ptr->image;
+
+   _newLeftImg = true;
 }
 void LaserMapping::depthHandler(const sensor_msgs::Image::ConstPtr& msg) {
 
-    cv_bridge::CvImageConstPtr cv_ptr;
-    try{
-      cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
-    }
-    catch (cv_bridge::Exception& e){
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-    }
+   cv_bridge::CvImageConstPtr cv_ptr;
+   try{
+   cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+   }
+   catch (cv_bridge::Exception& e){
+   ROS_ERROR("cv_bridge exception: %s", e.what());
+   return;
+   }
 
-    _mat_depth = cv_ptr->image;
+   _mat_depth = cv_ptr->image;
 
-    // Get a pointer to the depth values casting the data
-    // pointer to floating point
-    depths = (float*)(&msg->data[0]);
+   // Get a pointer to the depth values casting the data
+   // pointer to floating point
+   depths = (float*)(&msg->data[0]);
+
+   _newDepthImg = true;
 }
 
 void LaserMapping::leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg) {
@@ -328,20 +332,12 @@ void LaserMapping::imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn)
 
 void LaserMapping::spin()
 {
+   // thread 시작
+   thread t1(&LaserMapping::pclviewerprocess, this);
+
    ros::Rate rate(100);
    bool status = ros::ok();
-
-   ///////// Point cloud viewer ////////////    // 초기화
-   pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-   viewer->setBackgroundColor (0, 0, 0);
-   viewer->addCoordinateSystem (1.0);
-   viewer->initCameraParameters ();
    
-   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(laserCloudSurround());
-   
-   int cnt = 0;   // counts number of point clouds drawn on viewer.
-   /////////////////////////////////////////
-
    while (status)
    {
       ros::spinOnce();
@@ -349,7 +345,38 @@ void LaserMapping::spin()
       // try processing buffered data.
       process();
 
+      status = ros::ok();
+      rate.sleep();
+   }
 
+   // thread 합치기
+   t1.join();
+
+   // // 종료시 축적한 포인트 클라우드를 저장한다.
+   // for (int i = 0; i < PCNUM; i++)
+   // {
+   //    *_laserCloudSurround += *_laserCloudFullResArray[i];
+   // }
+   // pcl::io::savePLYFileBinary("/home/cgvlab/ply_test2/output_zedTrans111_HD1080.ply", *_laserCloudSurround);
+}
+
+void LaserMapping::pclviewerprocess()
+{
+   ///////// Point cloud viewer ////////////    // 초기화
+   pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+   viewer->setBackgroundColor (0, 0, 0);
+   viewer->addCoordinateSystem (1.0);
+   viewer->initCameraParameters ();
+   
+   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(laserCloudSurround());
+   /////////////////////////////////////////
+
+   // ros::Rate prate(100);
+   bool pstatus = ros::ok();
+
+   unsigned int cnt = 0;
+   while (pstatus)
+   {
       ///////// Point cloud viewer ////////////
       if(newPointCloud)    // 클라우드가 새로 업데이트 되었을 때만 viewer에 업데이트 해 준다.
       {
@@ -361,8 +388,8 @@ void LaserMapping::spin()
       viewer->spinOnce();
       /////////////////////////////////////////
 
-      status = ros::ok();
-      rate.sleep();
+      pstatus = ros::ok();
+      // prate.sleep();
    }
 }
 
@@ -372,12 +399,18 @@ void LaserMapping::reset()
    _newLaserCloudSurfLast = false;
    _newLaserCloudFullRes = false;
    _newLaserOdometry = false;
+
+   _newLeftImg = false;
+   _newDepthImg = false;
 }
 
 bool LaserMapping::hasNewData()
 {
    return _newLaserCloudCornerLast && _newLaserCloudSurfLast &&
       _newLaserCloudFullRes && _newLaserOdometry &&
+
+      _newLeftImg && _newDepthImg &&
+      
       fabs((_timeLaserCloudCornerLast - _timeLaserOdometry).toSec()) < 0.005 &&
       fabs((_timeLaserCloudSurfLast - _timeLaserOdometry).toSec()) < 0.005 &&
       fabs((_timeLaserCloudFullRes - _timeLaserOdometry).toSec()) < 0.005;
@@ -398,14 +431,16 @@ void LaserMapping::process()
 
 void LaserMapping::publishResult()
 {
-   // publish new map cloud according to the input output ratio.     // 입력, 출력비에 따라 새로운 map cloud를 publish.
-   // # laserCloudSurround 는 RVIZ로 publish하지 않고 PCL_Visualizer로 확인한다. (용량이 너무 크기 때문)
+   // // publish new map cloud according to the input output ratio.     // 입력, 출력비에 따라 새로운 map cloud를 publish.
+   // if (hasFreshMap()){ // publish new map cloud.                      // map cloud가 새롭게 업데이트 되었다면 publish 한다.
+   //    publishCloudMsg(_pubLaserCloudSurround, laserCloudSurround(), _timeLaserOdometry, "/camera_init");
+   // }
+   // 위의 laserCloudSurround 는 RVIZ로 publish하지 않고 PCL_Visualizer로 확인한다. (용량이 너무 크기 때문)
 
-   if (_newLaserCloudMap)){ // publish new map cloud to transform maintenance node.                      // map cloud가 새롭게 업데이트 되었다면 publish 한다.
-      publishCloudMsg(_pubLaserCloudMap, laserCloudMap(), _timeLaserOdometry, "/camera_init");
-      _newLaserCloudMap = false;
+   if (newPointCloud){ // publish new map cloud to transform maintenance node.                      // map cloud가 새롭게 업데이트 되었다면 publish 한다.
+      publishCloudMsg(_pubLaserCloudSurround, *_laserCloudSurround, _timeLaserOdometry, "/camera_init");
+      // _newLaserCloudMap = false;
    }
-   
 
    // publish transformed full resolution input cloud.               // 변환된 full resolution 포인트 클라우드를 publish.
    publishCloudMsg(_pubLaserCloudFullRes, laserCloud(), _timeLaserOdometry, "/camera_init");

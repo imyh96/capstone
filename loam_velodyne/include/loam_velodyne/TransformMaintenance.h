@@ -40,6 +40,19 @@
 
 #include "loam_velodyne/BasicTransformMaintenance.h"
 
+////////////////////////////////////////
+#include <ros/ros.h>
+#include <nav_msgs/Odometry.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_broadcaster.h>
+#include "common.h"
+
+#include <thread>
+using std::thread;
+////////////////////////////////////////
+
 namespace loam {
 
 /** \brief Implementation of the LOAM transformation maintenance component. 변환(행렬) 유지관리(maintenance) 컴포넌트의 구현을 위한 클래스
@@ -48,7 +61,7 @@ namespace loam {
 class TransformMaintenance: public BasicTransformMaintenance 
 {  
 public:
-  TransformMaintenance(); // 생성자.
+  explicit TransformMaintenance(); // 생성자.
 
 
   /** \brief Setup component. // 셋업 메소드.
@@ -73,7 +86,7 @@ public:
   void odomAftMappedHandler(const nav_msgs::Odometry::ConstPtr& odomAftMapped);
 
   ////////////////////////////////////////
-  void laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMap);
+  void laserCloudMapHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloud);
   void spin();
   void process();
   ////////////////////////////////////////
@@ -89,8 +102,8 @@ private:
   ros::Subscriber _subOdomAftMapped;    ///< (low frequency) mapping odometry subscriber. 매핑 오도메트리의 subscriber.
 
   ////////////////////////////////////////
-  ros::Subscriber _subLaserCloudMap; 
-  bool _newLaserCloudMap;
+  ros::Subscriber _subLaserCloud; 
+  // thread t1;
   ////////////////////////////////////////
 };
 

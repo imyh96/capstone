@@ -48,6 +48,9 @@
 #include <sensor_msgs/Image.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <sensor_msgs/CameraInfo.h>
+
+#include <thread>
+using std::thread;
 ////////////////////////////////////////
 
 namespace loam
@@ -104,6 +107,8 @@ public:
    void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
    void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
    void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+
+   void pclviewerprocess();
    // ////////////////////////////////////////////////////////////////
 
 
@@ -140,7 +145,7 @@ private:
    nav_msgs::Odometry _odomAftMapped;      ///< 매핑 odometry 메시지 / mapping odometry message
    tf::StampedTransform _aftMappedTrans;   ///< 매핑 odometry 변환 / mapping odometry transformation
 
-   ros::Publisher _pubLaserCloudMap;    ///< map cloud 메시지 송신기 / map cloud message publisher
+   ros::Publisher _pubLaserCloudSurround;    ///< map cloud 메시지 송신기 / map cloud message publisher
 
    ros::Publisher _pubLaserCloudFullRes;     ///< 현재 full resolution cloud 메시지 송신기 / current full resolution cloud message publisher
    ros::Publisher _pubOdomAftMapped;         ///< 매핑 odometry 송신기 / mapping odometry publisher
@@ -158,6 +163,9 @@ private:
    ros::Subscriber _subDepthRectified;
    ros::Subscriber _subLeftcamInfo;
    bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
+
+   bool _newLeftImg = false;
+   bool _newDepthImg = false;
    //////////////////////////////////////////
 };
 

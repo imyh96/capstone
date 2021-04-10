@@ -125,18 +125,6 @@ public:
   bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode); // 셋업 메소드.
 
 
-  // zed2로 부터 오른쪽 왼쪽의 카메라 영상을 받아오기 위한 메소드.
-  void imageRightRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
-  void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
-
-  // zed2로 부터 깊이 영상을 받아오기 위한 메소드.
-  void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
-
-  // zed2로 부터 calibration을 위한 카메라 정보를 받아오기 위한 메소드.
-  void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
-  void rightcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
-
-
   /** \brief Handler method for input cloud messages.             // 들어오는 클라우드 메세지의 handler 메소드
    * 
    * @param laserCloudMsg the new input cloud message to process. // 처리(process)해야 하는 새로 입력된 클라우드 메세지
@@ -170,22 +158,6 @@ private:
   
   ros::Subscriber _subLaserCloud;   ///< input cloud message subscriber.                        // 입력되는 포인트클라우드 메세지의 subscriber.
 
-  ////////////////////////////////////////////
-  ros::Subscriber _subRightRectified;
-  ros::Subscriber _subLeftRectified;
-  ros::Subscriber _subDepthRectified;
-
-  ros::Subscriber _subLeftcamInfo;
-  ros::Subscriber _subRightcamInfo;
-
-  bool _newLeftcamInfo = false;   // 새 카메라 내부 파라미터가 들어왔는지 확인하는 flag.
-
-  // std::set<std::string> overlapCheck;
-  // std::set<std::string>::iterator iter;
-
-  // //std::vector<std::queue<pcl::PointXYZRGBNormal>> prevPointAt;
-  // std::queue<pcl::PointXYZRGBNormal> prevPointAt[16];
-  // ////////////////////////////////////////////
 };
 
 } // end namespace loam

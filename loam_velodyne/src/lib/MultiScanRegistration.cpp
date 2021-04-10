@@ -36,11 +36,6 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 
-#define ZEDRESOLW 2208 // HD2K: 2208 , HD1080: 1920
-#define ZEDRESOLH 1242 // HD2K: 1242 , HD1080: 1080
-
-
-
 namespace loam {
 
 MultiScanMapper::MultiScanMapper(const float& lowerBound,
@@ -129,63 +124,12 @@ bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& pri
     }
   }
   
-  // receiving zed2's camera calibration data topic
-  if(!_newLeftcamInfo)
-    _subLeftcamInfo = node.subscribe("/zed2/zed_node/left/camera_info", 10, &MultiScanRegistration::leftcamInfoHandler, this);
-  //_subRightcamInfo = node.subscribe("/zed2/zed_node/right/camera_info", 10, &MultiScanRegistration::rightcamInfoCallback, this);
-
-
-  // receiving zed2's depth image topic
-  _subDepthRectified = node.subscribe("/zed2/zed_node/depth/depth_registered", 10, &MultiScanRegistration::depthHandler, this);
-
-  
   // subscribe to input cloud topic   // 해당 라이다 센서로 부터 포인트 클라우드를 받아온다.
   _subLaserCloud = node.subscribe<sensor_msgs::PointCloud2>
       ("/multi_scan_points", 2, &MultiScanRegistration::handleCloudMessage, this);
 
   return true;
 }
-
-void MultiScanRegistration::depthHandler(const sensor_msgs::Image::ConstPtr& msg) {
-
-    cv_bridge::CvImageConstPtr cv_ptr;
-    try{
-      cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
-    }
-    catch (cv_bridge::Exception& e){
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-    }
-
-    _mat_depth = cv_ptr->image;
-
-
-    // Get a pointer to the depth values casting the data
-    // pointer to floating point
-    depths = (float*)(&msg->data[0]);
-    
-}
-
-void MultiScanRegistration::leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg) {
-
-    K = (cv::Mat_<float>(3,3) <<  msg->P[0], msg->P[1], msg->P[2],
-                                  msg->P[4], msg->P[5], msg->P[6],
-                                  msg->P[8], msg->P[9], msg->P[10] );
-
-  
-    // 두 행렬 곱하기.
-    KE = K * E;
-
-    _newLeftcamInfo = true;   // 한번만 시행되도록 flag ON.
-}
-
-void MultiScanRegistration::rightcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg) {
-    ROS_INFO( "Right camera: \n K matrix: %.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f \n R matrix: %.3f, %.3f, %.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f \n P matrix: %.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
-              msg->K[0], msg->K[1], msg->K[2], msg->K[3], msg->K[4], msg->K[5], msg->K[6], msg->K[7], msg->K[8],
-              msg->R[0], msg->R[1], msg->R[2], msg->R[3], msg->R[4], msg->R[5], msg->R[6], msg->R[7], msg->R[8],
-              msg->P[0], msg->P[1], msg->P[2], msg->P[3], msg->P[4], msg->P[5], msg->P[6], msg->P[7], msg->P[8], msg->P[9], msg->P[10], msg->P[11]);
-}
-/////////////////////////////////////////////////////
 
 
 void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
@@ -203,6 +147,7 @@ void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2Con
   //std::cout << "invKE: " << invKE << std::endl;
 
   process(laserCloudIn, fromROSTime(laserCloudMsg->header.stamp));
+  
 }
 
 
@@ -231,18 +176,8 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
   // extract valid points from input cloud.   // 입력된 클라우드로 부터 유효한 포인트들을 추출하는 for문.
   _laserCloudSur.clear();
 
-
-
-  //pcl::PointXYZI point;
-  ////////////////////////////////////////
+  // //pcl::PointXYZI point;
   pcl::PointXYZRGBNormal point;
-
-  int xp, yp, Idx;
-
-  float depthL, xl, yl, zl;
-  cv::Mat_<float> xyz_C(3,1);
-  cv::Mat_<float> xyz_L(4,1);
-  ////////////////////////////////////////
 
 
   for (int i = 0; i < cloudSize; i++) {
@@ -299,33 +234,6 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZI>& laser
     float relTime = config().scanPeriod * (ori - startOri) / (endOri - startOri);
     point.curvature = scanID + relTime;
 
-
-    if(point.z > 0)
-    {
-      xyz_L << point.x, point.y, point.z, 1; // 라이다 좌표.
-      xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
-
-      xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
-      yp = round(xyz_C[1][0]/xyz_C[2][0]);
-
-      if(0 <= xp && xp < ZEDRESOLW)  // 2208*1242 /1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
-      {
-        if(0 <= yp && yp < ZEDRESOLH) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
-        {
-          Idx = xp + ZEDRESOLW*yp;   // 이미지의 각 픽셀에 해당하는 depth값을 얻기 위한 index.
-
-          if(std::isfinite(depths[Idx])){
-              point.normal_x = xp;
-              point.normal_y = yp;
-              point.normal_z = depths[Idx];
-          }
-
-        }
-
-      }
-
-    }
-    ///////////////// ///////////////////////////// ////////////////////
     
     projectPointToStartOfSweep(point, relTime);   // parameter로 입력한 포인트를 sweep의 시작지점으로 투영해주는 메소드. 
                                                   // 매 포인트를 이렇게 처리해주어야, 한번의 sweep에 대해 하나의 제대로 된 포인트 클라우드를 생성할 수 있다.

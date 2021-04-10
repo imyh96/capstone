@@ -33,7 +33,6 @@
 #include <cmath>
 #include "loam_velodyne/BasicTransformMaintenance.h"
 
-
 namespace loam
 {
 
@@ -41,6 +40,18 @@ using std::sin;
 using std::cos;
 using std::asin;
 using std::atan2;
+
+BasicTransformMaintenance::BasicTransformMaintenance() :
+_laserCloudSurround(new pcl::PointCloud<pcl::PointXYZRGB>()),
+_laserCloudMap(new pcl::PointCloud<pcl::PointXYZRGB>()) 
+{
+   //////////////////////////
+   _laserCloudMapArray.resize(PCNUM);
+
+   for(int i = 0; i < PCNUM; i++)
+      _laserCloudMapArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGB>());
+   //////////////////////////
+}
 
 
 void BasicTransformMaintenance::updateOdometry(double pitch, double yaw, double roll, double x, double y, double z)
@@ -175,18 +186,6 @@ void BasicTransformMaintenance::transformAssociateToMap()
    _transformMapped[4] = _transformAftMapped[4] - y2;
    _transformMapped[5] = _transformAftMapped[5]
       - (-sin(_transformMapped[1]) * x2 + cos(_transformMapped[1]) * z2);
-}
-
-void BasicTransformMaintenance::process()
-{
-   // 점들 나눠서 저장하기.
-   for (auto& pt : *_laserCloudMap){
-      if(SInd > PCNUM-1)
-         SInd = 0;
-
-      _laserCloudMapArray[SInd]->push_back(pt);
-      SInd++;
-   }
 }
 
 

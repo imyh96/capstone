@@ -51,7 +51,20 @@
 #include <string>
 #include <cv_bridge/cv_bridge.h>
 
-#define PCNUM 100000 // number of _laserCloudFullResColorStack point clouds
+// #define PCNUM 9600000 // number of _laserCloudFullResColorStack point clouds
+
+#define lidarRT 0
+#define camRT 1
+
+#define PIXRANGE 1 // 1 = 3x3, 2 = 5x5, 3 = 7x7 
+#define DEPTHRANGE 0.2  // 0.1 = +-10cm = 20cm, 0.2 = +-20cm = 40cm 
+
+#define ZEDRESOLW 2208 // HD2K: 2208 , HD1080: 1920, HD720: 1280
+#define ZEDRESOLH 1242 // HD2K: 1242 , HD1080: 1080, HD720: 720
+
+#define OVERLAPRANGE 200  // 100 = cm, 1000 = mm 범위에 대해 반올림.
+
+
 
 using namespace cv;
 
@@ -134,19 +147,18 @@ public:
    
    auto const& laserCloudSurround() const { return _laserCloudSurround; }
    // auto const& laserCloudSurround() const { return *_laserCloudSurround; }
-   
-   auto const& laserCloudMap() const { return *_laserCloudMap; }
+   auto const& laserCloudSurroundColor() const { return _laserCloudSurroundColor; }
    
    auto const& zedWorldTrans()   const { return _zedWorldTrans; }
 
+   bool newPointCloud = false;   // 클라우드의 업데이트를 확인하기 위한 flag.
+
    void changetoZedRT(Twist const& twist);
-
-   // auto const& laserCloudSurroundColor() const { return _laserCloudSurroundColor; }
    ////////////////////////////////////////////////////////////////////
 
 
    ////////////////////////////////////////////////////////////////////
-   bool isOverlap(const pcl::PointXYZRGB& point);
+   bool isOverlap(const pcl::PointXYZRGBNormal& point); //PointXYZRGB
 
    //HD 내부파라미터
    cv::Mat K;
@@ -158,6 +170,9 @@ public:
    float* depths;
    cv::Mat _mat_left;
    cv::Mat _mat_depth;
+
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
+   // std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudFullResArray;
    ////////////////////////////////////////////////////////////////////
    
 
@@ -210,22 +225,15 @@ private:
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudFullRes;      ///< last full resolution cloud
 
    /////////////////////////////////////////////////
-   pcl::PointCloud<pcl::PointXYZRGB> _laserCloudToViewer;
-   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
-   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudMap;
-   std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudMapArray;
-   // pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColorStack;
-   // pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurroundColor;
+   pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColor;
+   pcl::PointCloud<pcl::PointXYZRGB> _laserCloudFullResColorStack;
    
    int SInd = 0;
-   int toZeroCnt = 0;
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurroundColor;
    Twist _zedWorldTrans;         // subscribe로 계속해서 업데이트 되는 변수.
 
    std::set<std::string> overlapCheck;
    std::set<std::string>::iterator iter;
-
-   bool _newPointCloud = false;     // 클라우드의 업데이트를 확인하기 위한 flag.
-   bool _newLaserCloudMap = false;  // 축적된 map을 publish 하기 위한 flag.
    //////////////////////////////////////////////////////
 
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerStack;
@@ -233,10 +241,12 @@ private:
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerStackDS;  ///< down sampled
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfStackDS;    ///< down sampled
 
-   
+   // pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurroundDS;     ///< down sampled
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudCornerFromMap;
    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr _laserCloudSurfFromMap;
+
+   
 
    pcl::PointCloud<pcl::PointXYZRGBNormal> _laserCloudOri;
    pcl::PointCloud<pcl::PointXYZRGBNormal> _coeffSel;

@@ -47,6 +47,9 @@
 
 #include "BasicLaserOdometry.h"
 
+// #include <sensor_msgs/Image.h>
+// #include <sensor_msgs/CameraInfo.h>
+// #include "time_utils.h"
 
 namespace loam
 {
@@ -68,7 +71,14 @@ namespace loam
      */
     virtual bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
 
+    // ////////////////////////////////////////
+    // void imageLeftRectifiedHandler(const sensor_msgs::Image::ConstPtr& msg);
+    // void depthHandler(const sensor_msgs::Image::ConstPtr& msg);
+    // void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
+    // ////////////////////////////////////////
+
     // 핸들러 = subscribe 해 온 메세지를 이 노드의 적절한 변수로 잘 저장하기 위한 메소드들. 각각이 취하는 행동에는 큰 차이 없다.
+
     /************* sharp corner 특징점 클라우드 핸들러 ***************/
     /** \brief Handler method for a new sharp corner cloud.
      *
@@ -169,7 +179,7 @@ namespace loam
     ros::Subscriber _subLaserCloudFullRes;      ///< full resolution cloud message subscriber
     ros::Subscriber _subImuTrans;               ///< IMU transformation information message subscriber
     
-  ///////////////////////////////////
+    ///////////////////////////////////
   };
 
 } // end namespace loam

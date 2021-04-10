@@ -38,14 +38,6 @@
 #include <Eigen/QR>
 
 
-// #define lidarRT 0
-#define RT_TYPE 1 // 0: use lidar RT, 1: use camera RT
-
-#define PIXRANGE 1 // 1 = 3x3, 2 = 5x5, 3 = 7x7 
-#define DEPTHRANGE 0.2
-#define ZEDRESOL 2208 // HD2K: 2208 , HD1080: 1920
-
-
 namespace loam
 {
 
@@ -94,13 +86,13 @@ BasicLaserMapping::BasicLaserMapping(const float& scanPeriod, const size_t& maxI
    _laserCloudCornerDSArray.resize(_laserCloudNum);
    _laserCloudSurfDSArray.resize(_laserCloudNum);
 
-   //////////////////////////
-   _laserCloudFullResArray.resize(PCNUM);
-   for(int i = 0; i < PCNUM; i++)
-   {
-      _laserCloudFullResArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGB>());
-   }
-   //////////////////////////
+   // //////////////////////////
+   // _laserCloudFullResArray.resize(PCNUM);
+   // for(int i = 0; i < PCNUM; i++)
+   // {
+   //    _laserCloudFullResArray[i].reset(new pcl::PointCloud<pcl::PointXYZRGB>());
+   // }
+   // //////////////////////////
 
    for (size_t i = 0; i < _laserCloudNum; i++)
    {
@@ -344,17 +336,9 @@ bool BasicLaserMapping::createDownsizedMap()
 
    // accumulate map cloud.      // map cloud를 축적한다.
    _laserCloudSurround->clear();
-   *_laserCloudSurround += _laserCloudToViewer;
+   *_laserCloudSurround += _laserCloudFullResColor;
 
    newPointCloud = true;
-
-   if(_newLaserCloudMap){
-      for (int i = 0; i < PCNUM; i++)
-      {
-         *_laserCloudMap += *_laserCloudMapArray[i];
-         _laserCloudMapArray[i]->clear();
-      }
-   }
 
    // // down size map cloud.    // map cloud를 다운 사이즈한다.
    // _laserCloudSurroundDS->clear();
@@ -369,15 +353,15 @@ bool BasicLaserMapping::createDownsizedMap()
 
 
 /////////////////// 중복 제거 알고리즘 ///////////////////
-bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGB& point){
+bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGBNormal& point){
   
    // 중복 제거 알고리즘 용.
 
-   int preci = 500;  // mm 범위에 대해 반올림.
+   int preci = OVERLAPRANGE;
    float tmpArr[3];
    std::string tmpString;
 
-   // 1. mm 범위에 대해 반올림. (preci를 곱한 뒤, round()후 다시 preci를 나눈다.)
+   // 1. 범위에 대해 반올림. (preci를 곱한 뒤, round()후 다시 preci를 나눈다.)
    tmpArr[0] = round(point.x * preci) / preci;
    tmpArr[1] = round(point.y * preci) / preci;
    tmpArr[2] = round(point.z * preci) / preci;
@@ -417,14 +401,17 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    pcl::PointXYZRGB pointRGB;    // PointXYZRGBNormal -> PointXYZRGB 타입으로 바꿔주기 위한 포인트 변수.
    ///////////////////////////
 
-#if RT_TYPE
+
+   // // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
+   //                                     // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
+#if lidarRT   
+   transformAssociateToMap();
+#endif
+
+#if camRT
    /////////////////////////////////////////////////////
    changetoZedRT(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
    /////////////////////////////////////////////////////
-#else
-   // relate incoming data to map.     // 새로 subscribe한 transform인 _transformSum = (T^L)_k+1 와 이전 sweep에서 만든 (T^W)_k로,
-   //                                     // 새로운 pc를 기존의 map에 이어 붙이기 위한 변환행렬인 (T^W)_k+1 = _transformTobeMapped 를 생성하는 함수.
-   transformAssociateToMap();
 #endif
    
 
@@ -689,8 +676,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    _laserCloudCornerStack->clear();
    _laserCloudSurfStack->clear();
 
-#if RT_TYPE
-#else  
+#if lidarRT 
    // run pose optimization.        // 포즈 최적화를 시행한다.
    optimizeTransformTobeMapped();   // Odometry 알고리즘과 같이, 3차원 KD tree를 이용해 d 를 최소화 하는 변환행렬(_transformTobeMapped)을 구한다.
    /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -714,75 +700,85 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
   pcl::PointXYZRGB pixpoint;
 
-  int ind = 0;
+  cv::Mat_<float> xyz_C(3,1);
+  cv::Mat_<float> xyz_L(4,1);
   ////////////////////////////////////////
    
    
    ///////////////////////////////////////////////////////
    // full res pc의 포인트들 중, 컬러가 입혀진 포인트들만 world좌표계로 변환, 포인트 타입 변환 후, _laserCloudFullResColorStack에 축적한다. 
-   _laserCloudToViewer.clear();
+   _laserCloudFullResColor.clear();
    for (auto& pt : *_laserCloudFullRes){
-      
-      // 해당 점에 색이 입혀진 경우.
-      if(pt.normal_z != -1 && pt.normal_y != -1 && pt.normal_x != -1){
 
-         xl = pt.x - 0.165; // 라이다 점의 depth값을 구할 때, 하드웨어의 위치관계를 고려해 주어야 한다.
-         yl = pt.y + 0.066;
-         zl = pt.z - 0.0444;
-
-         depthL = sqrt(xl*xl + yl*yl + zl*zl);
-         depthZ = pt.normal_z;
-         xp = pt.normal_x;
-         yp = pt.normal_y;
-
-         if(((depthL-DEPTHRANGE) < depthZ) && (depthZ < (depthL+DEPTHRANGE)))
+      // 라이다 앞 부분의 점들만 확인
+      if(pt.z > 0)
+      {
+         // 중복점 제거 알고리즘 적용
+         if(!isOverlap(pt))  //pixpoint
          {
-            for(int x = xp-PIXRANGE; x <= xp+PIXRANGE; x++){
-               for(int y = yp-PIXRANGE; y <= yp+PIXRANGE; y++){
+            // 라이다 좌표를 픽셀 좌표로 변환
+            xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
+            xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
 
-                  ind = x + ZEDRESOL * y;
+            xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
+            yp = round(xyz_C[1][0]/xyz_C[2][0]);
 
-                  if(((depthL-DEPTHRANGE) < depths[ind]) && (depths[ind] < (depthL+DEPTHRANGE)))
-                  {
-                     pixpoint.x = -((x - cx_d) * depthL / fx_d);
-                     pixpoint.y = -((y - cy_d) * depthL / fy_d);
-                     pixpoint.z = depthL;
+            // 이미지의 픽셀 범위 내의 점들만 확인
+            if(PIXRANGE <= xp && xp < ZEDRESOLW - PIXRANGE)  // 2208*1242 /1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
+            {
+               if(PIXRANGE <= yp && yp < ZEDRESOLH - PIXRANGE) // 추가 픽셀들이 5x5인 경우 2 1278  321, 960
+               {
+                  // 라이다 점의 depth값, depthL 구하기
+                  xl = pt.x - 0.165; // 하드웨어의 위치관계를 고려해 주어야 한다.
+                  yl = pt.y + 0.066;
+                  zl = pt.z - 0.0444;
+                  depthL = sqrt(xl*xl + yl*yl + zl*zl);
 
-                     if(!isOverlap(pixpoint))
-                     {
-                        p = _mat_left.ptr<uchar>(y);
-                        B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
-                        G = p[x*channels + 1];
-                        R = p[x*channels + 2]; 
+                  // 픽셀 point 추가 알고리즘
+                  for(int x = xp-PIXRANGE; x <= xp+PIXRANGE; x++){
+                     for(int y = yp-PIXRANGE; y <= yp+PIXRANGE; y++){
 
-                        rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
-                        pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
+                        // 각 픽셀의 depth값을 구하기 위한 index
+                        Idx = x + ZEDRESOLW * y;
 
-                        pointAssociateToMap(pixpoint, pointRGB);
-                        
-                        _laserCloudToViewer.push_back(pointRGB);
-                        
-                        if(SInd > PCNUM-1){
-                           SInd = 0;
-                           toZeroCnt++;
-                        }
+                        // 각 픽셀depth가 라이다의 depth와 일정 범위 내 인지 확인
+                        if(((depthL-DEPTHRANGE) < depths[Idx]) && (depths[Idx] < (depthL+DEPTHRANGE)))
+                        {
+                           // 3d 점의 좌표 입력
+                           pixpoint.x = -((x - cx_d) * depthL / fx_d);
+                           pixpoint.y = -((y - cy_d) * depthL / fy_d);
+                           pixpoint.z = depthL;
                            
-                        _laserCloudMapArray[SInd]->push_back(pointRGB);
-                        SInd++;
-                     }   
-            
+                           // RGB갑 입력
+                           p = _mat_left.ptr<uchar>(y);
+                           B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
+                           G = p[x*channels + 1];
+                           R = p[x*channels + 2]; 
+                           rgb = (static_cast<std::uint32_t>(R) << 16 | static_cast<std::uint32_t>(G) << 8 | static_cast<std::uint32_t>(B));
+                           pixpoint.rgb = *reinterpret_cast<float*>(&rgb);
+
+                           // WORLD 좌표계로 변환
+                           pointAssociateToMap(pixpoint, pointRGB);
+                           
+                           // point cloud에 입력
+                           _laserCloudFullResColor.push_back(pointRGB);
+                        }
+
+
+                     }
                   }
+
+
                }
             }
 
-         }
-      }  
-   }
 
-   // point가 일정 개수 이상 쌓이면 transform maintenance node로 publish.
-   if(toZeroCnt > 10){
-      _newLaserCloudMap = true;
-      toZeroCnt = 0;
+         }
+
+
+      }
+         
+      
    }
    ///////////////////////////////////////////////////////
    
