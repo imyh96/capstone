@@ -44,8 +44,6 @@ TransformMaintenance::TransformMaintenance()
 
    _laserOdometryTrans2.frame_id_ = "/camera_init";
    _laserOdometryTrans2.child_frame_id_ = "/camera";
-
-   
 }
 
 
@@ -62,9 +60,11 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
    _subOdomAftMapped = node.subscribe<nav_msgs::Odometry>
       ("/aft_mapped_to_init", 5, &TransformMaintenance::odomAftMappedHandler, this);
 
-   
+
+#if LOADMODE
    _subLaserCloud = node.subscribe<sensor_msgs::PointCloud2>
       ("/laser_cloud_surround", 1, &TransformMaintenance::laserCloudMapHandler, this);
+#endif
 
    return true;
 }
@@ -78,10 +78,13 @@ void TransformMaintenance::laserCloudMapHandler(const sensor_msgs::PointCloud2Co
    // printf("_newLaserCloudMap: %d\n", _newLaserCloudMap);
 }
 
+
 void TransformMaintenance::spin()
 {
+#if LOADMODE
    // thread 시작
    thread t1(&TransformMaintenance::process, this);
+#endif
 
    ros::Rate rate(100);        /// 회전 비율
    bool status = ros::ok();    // ros 상태 체크 
@@ -89,15 +92,13 @@ void TransformMaintenance::spin()
    // loop until shutdown
    while (status)
    {
-      ros::spinOnce();
-      
-      // // try processing new data
-      // process();   
+      ros::spinOnce(); 
 
       status = ros::ok();
       rate.sleep();
    }
 
+#if LOADMODE
    // thread 합치기
    t1.join();
   
@@ -108,7 +109,8 @@ void TransformMaintenance::spin()
    
    pcl::io::savePLYFileBinary(PLYFILENAME, *_laserCloudSurround);
    /////////////////////////////////////////
-   
+#endif
+
 }
 
 
@@ -144,6 +146,8 @@ void TransformMaintenance::laserOdometryHandler(const nav_msgs::Odometry::ConstP
 }
 
 
+// // try processing new data
+// process();  
 void TransformMaintenance::odomAftMappedHandler(const nav_msgs::Odometry::ConstPtr& odomAftMapped)
 {
    double roll, pitch, yaw;
@@ -163,6 +167,7 @@ void TransformMaintenance::odomAftMappedHandler(const nav_msgs::Odometry::ConstP
       odomAftMapped->twist.twist.linear.y,
       odomAftMapped->twist.twist.linear.z);
 }
+
 
 void TransformMaintenance::process() // const pcl::PointCloud<pcl::PointXYZRGB>& laserCloudIn
 {

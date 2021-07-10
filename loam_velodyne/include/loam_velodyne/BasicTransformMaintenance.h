@@ -43,7 +43,10 @@
 ////////////////////////////////////
 
 #define PCNUM 2000000 // number of _laserCloudFullResColorStack point clouds
-#define PLYFILENAME "/home/cgvlab/ply_test2/output_zedTrans134_thread_OV200.ply"
+#define PLYFILENAME "/home/cgvlab/ply_test3/0615.ply"
+
+//load mode change
+#define LOADMODE 0
 
 namespace loam
 {

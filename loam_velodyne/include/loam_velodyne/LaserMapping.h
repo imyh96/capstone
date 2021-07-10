@@ -109,6 +109,9 @@ public:
    void leftcamInfoHandler(const sensor_msgs::CameraInfo::ConstPtr& msg);
 
    void pclviewerprocess();
+   void saveDataSet();
+   void loadDataSet();
+   void saveDepthSet();
    // ////////////////////////////////////////////////////////////////
 
 
@@ -135,7 +138,7 @@ private:
    ros::Time _timeLaserCloudSurfLast;     ///< 현재 last surface cloud의 시간 / time of current last surface cloud
    ros::Time _timeLaserCloudFullRes;      ///< 현재 full resolution cloud의 시간 / time of current full resolution cloud
    ros::Time _timeLaserOdometry;          ///< 현재 laser odometry의 시간 / time of current laser odometry
-
+   ros::Time _timeZed;//sue 
    bool _newLaserCloudCornerLast;  ///< 새로운 last corner cloud가 들어오면 true / flag if a new last corner cloud has been received
    bool _newLaserCloudSurfLast;    ///< 새로운 last surface cloud가 들어오면 true / flag if a new last surface cloud has been received
    bool _newLaserCloudFullRes;     ///< 새로운 full resolution cloud가 들어오면 true / flag if a new full resolution cloud has been received
@@ -166,6 +169,22 @@ private:
 
    bool _newLeftImg = false;
    bool _newDepthImg = false;
+
+   bool _newZedPose = false;
+   bool _newDataSet = false;
+
+   double loaded_zedWorldTrans[6];
+   double loaded_transformSum[6];
+
+   cv::Mat loaded_mat_left;
+   cv::Mat loaded_mat_depth;
+   double loaded_K[9];
+
+   float loaded_depths[1280*720];
+
+   bool dataloaded = false;
+
+   bool saveKvalue = false;
    //////////////////////////////////////////
 };
 

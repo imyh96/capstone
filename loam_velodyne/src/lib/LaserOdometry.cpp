@@ -28,7 +28,7 @@
 //
 // This is an implementation of the algorithm described in the following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
+//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014
 
 #include <pcl/filters/filter.h>
 
@@ -324,7 +324,6 @@ namespace loam
     _laserOdometryMsg.pose.pose.position.y    = transformSum().pos.y();
     _laserOdometryMsg.pose.pose.position.z    = transformSum().pos.z();
     _pubLaserOdometry.publish(_laserOdometryMsg);                         // publish.
-
 
     // 위와 같은 laserOdometry 변환행렬을 tf로도 broadcast한다.
     _laserOdometryTrans.stamp_ = _timeSurfPointsLessFlat;                                                               // time stamp.

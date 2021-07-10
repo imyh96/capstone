@@ -8,5 +8,6 @@ add_library(loam
             LaserMapping.cpp
             BasicLaserMapping.cpp
             TransformMaintenance.cpp
-            BasicTransformMaintenance.cpp)
+            BasicTransformMaintenance.cpp
+)
 target_link_libraries(loam ${catkin_LIBRARIES} ${PCL_LIBRARIES})

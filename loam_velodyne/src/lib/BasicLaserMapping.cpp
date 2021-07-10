@@ -37,6 +37,8 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+#define IMAGESAVE 0
+
 
 namespace loam
 {
@@ -74,7 +76,11 @@ BasicLaserMapping::BasicLaserMapping(const float& scanPeriod, const size_t& maxI
    _laserCloudSurround(new pcl::PointCloud<pcl::PointXYZRGB>()),  //PointXYZRGBNormal
    _laserCloudSurroundDS(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
    _laserCloudCornerFromMap(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
-   _laserCloudSurfFromMap(new pcl::PointCloud<pcl::PointXYZRGBNormal>())
+   _laserCloudSurfFromMap(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+
+   loaded_laserCloudFullRes(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   loaded_laserCloudCornerLast(new pcl::PointCloud<pcl::PointXYZRGBNormal>()),
+   loaded_laserCloudSurfLast(new pcl::PointCloud<pcl::PointXYZRGBNormal>())
 {
    // frame 수 세는 변수(초기화) / initialize frame counter
    _frameCount = _stackFrameNum - 1;
@@ -353,7 +359,7 @@ bool BasicLaserMapping::createDownsizedMap()
 
 
 /////////////////// 중복 제거 알고리즘 ///////////////////
-bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGBNormal& point){
+bool BasicLaserMapping::isOverlap(const pcl::PointXYZRGB& point){
   
    // 중복 제거 알고리즘 용.
 
@@ -413,6 +419,9 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    changetoZedRT(_zedWorldTrans);   // A를 생성하기위한 현재 sweep의 trans 저장.
    /////////////////////////////////////////////////////
 #endif
+
+   // to save zed rt at same time as lidar rt
+   _zedWorldTransSync = _zedWorldTrans;
    
 
    // 새로 subscribe 해 온 두 특징점 클라우드(_laserCloudCornerLast,_laserCloudSurfLast)의 각 포인트들을 복사해서, 
@@ -704,24 +713,37 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
   cv::Mat_<float> xyz_L(4,1);
   ////////////////////////////////////////
    
-   
+#if IMAGESAVE   
+   // make depth image for check
+   cv::Mat img(720, 1280, CV_8UC1, Scalar(0));
+   cv::Mat dep_img(720, 1280, CV_32FC1, Scalar(0.0));
+
+   dep_img = _mat_depth.clone();
+#endif
+
    ///////////////////////////////////////////////////////
    // full res pc의 포인트들 중, 컬러가 입혀진 포인트들만 world좌표계로 변환, 포인트 타입 변환 후, _laserCloudFullResColorStack에 축적한다. 
+
+   //printf("before pixel increase!\n");
+#if SAVEMODE
+   std::ofstream Dvinfo("/home/cgvlab/catkin_ws/src/loam_velodyne/" + FOLDERNAME + "/zed_depth/" + std::string(std::to_string(dataset_cnt)) + "val.txt");
+   std::ofstream Diinfo("/home/cgvlab/catkin_ws/src/loam_velodyne/" + FOLDERNAME + "/zed_depth/" + std::string(std::to_string(dataset_cnt)) + "ind.txt");
+#endif
    _laserCloudFullResColor.clear();
    for (auto& pt : *_laserCloudFullRes){
 
       // 라이다 앞 부분의 점들만 확인
       if(pt.z > 0)
       {
-         // 중복점 제거 알고리즘 적용
-         if(!isOverlap(pt))  //pixpoint
-         {
             // 라이다 좌표를 픽셀 좌표로 변환
             xyz_L << pt.x, pt.y, pt.z, 1; // 라이다 좌표.
             xyz_C = KE * xyz_L;  // 행렬을 곱하여 라이다 좌표를 카메라 좌표로 변환.
 
             xp = round(xyz_C[0][0]/xyz_C[2][0]);  // 변환한 x, y 좌표. s를 나눠주어야 함.
             yp = round(xyz_C[1][0]/xyz_C[2][0]);
+
+            //printf("xp: %d, yp: %d!\n", xp, yp);
+            //printf("pt.x: %g, pt.y: %g, pt.z: %g!\n", pt.x, pt.y, pt.z);
 
             // 이미지의 픽셀 범위 내의 점들만 확인
             if(PIXRANGE <= xp && xp < ZEDRESOLW - PIXRANGE)  // 2208*1242 /1280,720 이내의 픽셀 좌표를 가지는 값들에 대해서만 depth값을 추가로 비교.
@@ -734,6 +756,13 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                   zl = pt.z - 0.0444;
                   depthL = sqrt(xl*xl + yl*yl + zl*zl);
 
+#if IMAGESAVE   
+                  // binary image
+                  img.at<uchar>(yp, xp) = 255;
+                  // depth value image
+                  dep_img.at<float>(yp, xp) = depthL;
+#endif
+
                   // 픽셀 point 추가 알고리즘
                   for(int x = xp-PIXRANGE; x <= xp+PIXRANGE; x++){
                      for(int y = yp-PIXRANGE; y <= yp+PIXRANGE; y++){
@@ -744,11 +773,24 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
                         // 각 픽셀depth가 라이다의 depth와 일정 범위 내 인지 확인
                         if(((depthL-DEPTHRANGE) < depths[Idx]) && (depths[Idx] < (depthL+DEPTHRANGE)))
                         {
+                           
+            #if SAVEMODE
+                           Diinfo << Idx << endl;
+                           Dvinfo << depths[Idx] << endl;
+            #endif
+
+            #if LIDARDEPTH
                            // 3d 점의 좌표 입력
                            pixpoint.x = -((x - cx_d) * depthL / fx_d);
                            pixpoint.y = -((y - cy_d) * depthL / fy_d);
                            pixpoint.z = depthL;
-                           
+            #endif
+
+            #if CAMERADEPTH
+                           pixpoint.x = -((x - cx_d) * depths[Idx] / fx_d);
+                           pixpoint.y = -((y - cy_d) * depths[Idx] / fy_d);
+                           pixpoint.z = depths[Idx];
+            #endif               
                            // RGB갑 입력
                            p = _mat_left.ptr<uchar>(y);
                            B = p[x*channels + 0];   // left 이미지에서 컬러값 추출.
@@ -759,11 +801,22 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
 
                            // WORLD 좌표계로 변환
                            pointAssociateToMap(pixpoint, pointRGB);
-                           
-                           // point cloud에 입력
-                           _laserCloudFullResColor.push_back(pointRGB);
-                        }
 
+                  #if OVERLAP         
+                           // 중복점 제거 알고리즘 적용
+                           if(!isOverlap(pointRGB))  //pixpoint
+                           {
+                  #endif      // point cloud에 입력
+                              _laserCloudFullResColor.push_back(pointRGB);
+
+                              point_cnt++;
+
+                  #if OVERLAP
+                           }
+                  #endif
+                           
+                           
+                        }
 
                      }
                   }
@@ -773,15 +826,25 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
             }
 
 
-         }
-
 
       }
          
       
    }
+
+#if SAVEMODE
+   Diinfo.close();
+   Dvinfo.close();
+#endif
    ///////////////////////////////////////////////////////
-   
+
+#if IMAGESAVE  
+   // save depth images
+   imwrite("/home/cgvlab/catkin_ws/src/loam_velodyne/yohan/depth_binary/"+ std::string(std::to_string(cnt)) + ".png", img);
+   imwrite("/home/cgvlab/catkin_ws/src/loam_velodyne/yohan/depthvalue/"+ std::string(std::to_string(cnt)) + ".png", dep_img);
+   imwrite("/home/cgvlab/catkin_ws/src/loam_velodyne/yohan/color_img/"+ std::string(std::to_string(cnt)) + ".png", _mat_left);
+   cnt++;
+#endif
 
    // store down sized corner stack points in corresponding cube clouds.      // 대응하는 cube 클라우드에 축소(down size)된 corner stack points를 다시 map으로 위치 이동후 저장.
    for (int i = 0; i < laserCloudCornerStackNum; i++)
@@ -858,6 +921,7 @@ bool BasicLaserMapping::process(Time const& laserOdometryTime)
    //          _transformTobeMapped.pos.x(), _transformTobeMapped.pos.y(), _transformTobeMapped.pos.z(),
    //          _transformTobeMapped.rot_x.deg(), _transformTobeMapped.rot_y.deg(), _transformTobeMapped.rot_z.deg());
 
+   ////////////////////////////////////////////////////////////
 
    return true;
 }  
@@ -1208,8 +1272,21 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
       if (deltaR < _deltaRAbort && deltaT < _deltaTAbort)
          break;
    }
-
    transformUpdate();
+   // //sue
+   // ros::Time end = ros::Time::now();
+   // std::time_t now_c = static_cast<time_t>(end.toSec());//start or end
+   // ofstream myFile_Handler;
+   // myFile_Handler.open("/home/cgvlab/catkin_ws/src/loam_velodyne/sue/time/lidar2.txt", std::ofstream::out | std::ofstream::app);//time to compare
+   // std::tm now_tm = *std::localtime(&now_c);
+   // char currentT[10];
+   // char* format="%I%M%S";
+   // std::strftime(currentT,10,"%I%M%S",&now_tm);
+   // std::stringstream ss;
+   // ss << std::setw(9) << std::setfill('0') << end.nsec;
+   // myFile_Handler <<std::string(currentT)<<"."<<ss.str().substr(0,4)<< endl;
+   // myFile_Handler.close();
+   // //sue
 }
 
 

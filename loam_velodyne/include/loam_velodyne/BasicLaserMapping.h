@@ -51,21 +51,34 @@
 #include <string>
 #include <cv_bridge/cv_bridge.h>
 
+// to save cam & lidar RT
+#include <fstream>
+#include <time.h>
+#include <sys/time.h>
+
 // #define PCNUM 9600000 // number of _laserCloudFullResColorStack point clouds
 
 #define lidarRT 0
 #define camRT 1
 
 #define PIXRANGE 1 // 1 = 3x3, 2 = 5x5, 3 = 7x7 
-#define DEPTHRANGE 0.2  // 0.1 = +-10cm = 20cm, 0.2 = +-20cm = 40cm 
+#define DEPTHRANGE 0.2  // 0.1 = +-10cm = 20cm, 0.2 = +-20cm = 40cm  0.05 = +-5cm = 10cm
 
-#define ZEDRESOLW 2208 // HD2K: 2208 , HD1080: 1920, HD720: 1280
-#define ZEDRESOLH 1242 // HD2K: 1242 , HD1080: 1080, HD720: 720
-
+#define OVERLAP 1
 #define OVERLAPRANGE 200  // 100 = cm, 1000 = mm 범위에 대해 반올림.
 
+#define LIDARDEPTH 1    // using lidar depth value and not camera depth value
+#define CAMERADEPTH 0   // using camera depth value and not lidar depth value
+
+// save, load mode change
+#define SAVEMODE 1   
+#define LOADMODE 0
+
+#define ZEDRESOLW 1280 // HD2K: 2208 , HD1080: 1920, HD720: 1280
+#define ZEDRESOLH 720 // HD2K: 1242 , HD1080: 1080, HD720: 720
 
 
+using namespace std;
 using namespace cv;
 
 namespace loam
@@ -148,17 +161,21 @@ public:
    auto const& laserCloudSurround() const { return _laserCloudSurround; }
    // auto const& laserCloudSurround() const { return *_laserCloudSurround; }
    auto const& laserCloudSurroundColor() const { return _laserCloudSurroundColor; }
-   
-   auto const& zedWorldTrans()   const { return _zedWorldTrans; }
 
    bool newPointCloud = false;   // 클라우드의 업데이트를 확인하기 위한 flag.
 
    void changetoZedRT(Twist const& twist);
+
+   auto const& transformTobeMapped()   const { return _transformTobeMapped; }
+   auto const& zedWorldTransSync()   const { return _zedWorldTransSync; }
+
+   auto const& zedWorldTrans()   const { return _zedWorldTrans; }
+   auto const& transformSum()  const { return _transformSum; }
    ////////////////////////////////////////////////////////////////////
 
 
    ////////////////////////////////////////////////////////////////////
-   bool isOverlap(const pcl::PointXYZRGBNormal& point); //PointXYZRGB
+   bool isOverlap(const pcl::PointXYZRGB& point); //PointXYZRGB
 
    //HD 내부파라미터
    cv::Mat K;
@@ -173,7 +190,22 @@ public:
 
    pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurround;
    // std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> _laserCloudFullResArray;
+
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr loaded_laserCloudFullRes;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr loaded_laserCloudSurfLast;
+   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr loaded_laserCloudCornerLast;
+
+   string FOLDERNAME = "06_15";
+   int FILENUM = 3987;
+   int dataset_cnt = 0;
+
+   long point_cnt = 0;
    ////////////////////////////////////////////////////////////////////
+
+   // to save binary depth images
+   ///////////////////////////////
+   // int cnt = 0;
+   ///////////////////////////////
    
 
 private:
@@ -230,7 +262,9 @@ private:
    
    int SInd = 0;
    pcl::PointCloud<pcl::PointXYZRGB>::Ptr _laserCloudSurroundColor;
-   Twist _zedWorldTrans;         // subscribe로 계속해서 업데이트 되는 변수.
+   Twist _zedWorldTrans;         // subscribe로 계속해서 업데이트 되는 변수.4
+
+   Twist _zedWorldTransSync;     // 라이다 rt와 최대한 같은 
 
    std::set<std::string> overlapCheck;
    std::set<std::string>::iterator iter;
